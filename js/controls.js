@@ -35,8 +35,8 @@ export function resolveInput(dt) {
 
   steerTarget = (right ? 1 : 0) - (left ? 1 : 0);
 
-  // Ease steering toward target for a natural feel.
-  const steerSpeed = 6.5;
+  // Ease steering toward target — fast response for snappy mobile steering.
+  const steerSpeed = 11;
   input.steer += (steerTarget - input.steer) * Math.min(1, steerSpeed * dt);
   if (Math.abs(input.steer) < 0.001) input.steer = 0;
 
