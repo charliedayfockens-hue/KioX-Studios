@@ -102,64 +102,57 @@ export class MenuPreview {
 }
 
 // ---------- Fullscreen + orientation ----------
-// Returns a status object; never throws. Falls back to the rotate hint / a
-// toast when true fullscreen or orientation lock isn't available.
+// Orientation is judged purely by the viewport dimensions (reliable across
+// iOS/Android), NOT by fullscreen/orientation-lock support.
+export function isLandscape() { return window.innerWidth >= window.innerHeight; }
+export function isPortrait() { return !isLandscape(); }
+export function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+
+// Tries fullscreen, then orientation lock, then ALWAYS continues. Never blocks
+// gameplay and never claims "unsupported" when the phone is already sideways.
 export async function goFullscreen() {
   const target = document.getElementById('game') || document.documentElement;
-  const status = { fullscreen: false, orientation: false, supported: false };
-
   const reqFs =
     target.requestFullscreen ||
     target.webkitRequestFullscreen ||
     target.webkitRequestFullScreen ||
     target.msRequestFullscreen;
+  const inFs = isFullscreen();
 
-  const inFs = document.fullscreenElement || document.webkitFullscreenElement;
-
+  let fsOk = false;
   try {
-    if (reqFs) {
-      status.supported = true;
-      if (!inFs) {
-        const p = reqFs.call(target, { navigationUI: 'hide' });
-        if (p && p.then) await p;
-        status.fullscreen = true;
-      } else {
-        status.fullscreen = true;
-      }
+    if (inFs) {
+      fsOk = true;
+    } else if (reqFs) {
+      const p = reqFs.call(target, { navigationUI: 'hide' });
+      if (p && p.then) await p;
+      fsOk = true;
     }
   } catch (e) {
-    // Some browsers reject even when the API exists (e.g. permissions).
-    status.fullscreen = false;
+    fsOk = false; // e.g. iOS Safari rejects fullscreen on non-video elements
   }
 
-  // Try to lock orientation to landscape (Android Chrome). iOS Safari has no
-  // support — we simply fall back to the rotate hint.
+  // Best-effort orientation lock (Android Chrome). Failure is fine.
   try {
     if (screen.orientation && screen.orientation.lock) {
       await screen.orientation.lock('landscape');
-      status.orientation = true;
     }
-  } catch (e) {
-    status.orientation = false;
-  }
+  } catch (e) { /* not supported — no problem, we keep playing */ }
 
-  // Feedback / fallback so the button never silently fails.
-  if (!status.supported && !status.orientation) {
-    toast('Fullscreen not supported here — rotate your phone sideways 📱');
-  } else if (isPortrait()) {
-    toast('Rotate your phone sideways for the best experience 📱');
-  } else {
+  // Messaging is based on ACTUAL orientation, and is always non-blocking.
+  if (isPortrait()) {
+    toast('Rotate your phone sideways for best gameplay 📱');
+  } else if (reqFs && !fsOk) {
+    toast('Fullscreen may not be supported on this browser.');
+  } else if (fsOk) {
     toast('Fullscreen on ✔');
+  } else {
+    // Already sideways, no fullscreen API — that's totally fine.
+    toast('Playing in landscape ✔');
   }
-  return status;
-}
-
-export function isFullscreen() {
-  return !!(document.fullscreenElement || document.webkitFullscreenElement);
-}
-
-export function isPortrait() {
-  return window.matchMedia('(orientation: portrait)').matches;
+  return { fullscreen: fsOk };
 }
 
 // ---------- Toast ----------
