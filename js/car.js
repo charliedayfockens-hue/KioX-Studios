@@ -30,12 +30,12 @@ export class Car {
     this.wheelSpin = 0;
     this.steerAngle = 0;
 
-    // ---- Tuning: fast, very slippery, long-gliding arcade feel ----
-    this.enginePower = 34;           // stronger acceleration
-    this.reversePower = 14;
+    // ---- Tuning: slower, very slippery, long-gliding arcade feel ----
+    this.enginePower = 26;           // slightly lower acceleration
+    this.reversePower = 13;
     this.brakePower = 42;
-    this.maxSpeed = 38;              // m/s — higher top speed
-    this.maxReverse = 11;
+    this.maxSpeed = 30;              // m/s — lower top speed (easier control)
+    this.maxReverse = 10;
     this.rollingDrag = 0.18;         // LOW forward drag → glides ~3s off throttle
     this.velDamp = 0.035;            // tiny overall damping → momentum lasts
 
@@ -47,11 +47,12 @@ export class Car {
     this.looseHold = 0.7;            // seconds the rear stays loose after handbrake
     this.maxLatAccel = 10;           // cap on sideways realignment (m/s^2) → gentle pull, sideways glide
 
-    // Torque is lower and smoother so big angles are holdable, not twitchy.
-    this.maxYawRate = 1.3;           // steering turn rate (rad/s) — lower torque
-    this.handbrakeYawBoost = 1.4;    // extra authority when handbraking (gentler)
-    this.yawEaseGrip = 5.0;          // angular acceleration into a turn (gripping)
-    this.yawEaseDrift = 2.6;         // gentler angular accel while drifting
+    // Faster steering response (higher ease) with only a modestly higher top
+    // turn rate → snappy turn-in and easy corrections, but not instant spin-out.
+    this.maxYawRate = 1.5;           // steering turn rate (rad/s)
+    this.handbrakeYawBoost = 1.4;    // extra authority when handbraking
+    this.yawEaseGrip = 7.5;          // faster angular accel into a turn (gripping)
+    this.yawEaseDrift = 3.6;         // faster response while drifting (easy to correct)
     this.yawDamp = 1.4;              // slow spin decay → holds angle after releasing steer
 
     this._loose = 0;                 // loose-rear timer
@@ -265,9 +266,9 @@ export class Car {
     }
     this.yaw -= this.yawRate * dt;
 
-    // Visual steer angle — snappier front-wheel response.
-    const targetSteer = input.steer * 0.65;
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 14 * dt);
+    // Visual steer angle — quicker front-wheel response.
+    const targetSteer = input.steer * 0.68;
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 18 * dt);
 
     // ---- Integrate position (velocity is independent of facing) ----
     this.pos.x += this.vel.x * dt;

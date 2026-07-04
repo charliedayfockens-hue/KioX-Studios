@@ -36,13 +36,29 @@
             <span class="brand-sub">STUDIOS</span>
           </div>
 
-          <div class="track-chip">🌲 Forest</div>
-
           <h1 class="game-title">
             <span>DRIFT</span>
             <span>ARENA</span>
           </h1>
           <p class="tagline">Slide · Smoke · Score</p>
+
+          <!-- Map selection -->
+          <div class="select-group">
+            <span class="select-label">Map</span>
+            <div class="segmented" id="map-select">
+              <button class="seg" data-map="forest">🌲 Forest</button>
+              <button class="seg" data-map="desert">🏜️ Desert</button>
+            </div>
+          </div>
+
+          <!-- Mode selection -->
+          <div class="select-group">
+            <span class="select-label">Mode</span>
+            <div class="segmented" id="mode-select">
+              <button class="seg" data-mode="free">🎯 Free Drift</button>
+              <button class="seg" data-mode="race">🏁 AI Race</button>
+            </div>
+          </div>
 
           <div class="menu-buttons">
             <button id="btn-play" class="btn btn-play">
@@ -158,8 +174,16 @@
             <span id="drift-total-value">0</span>
           </div>
         </div>
+        <!-- Race HUD (shown only in AI Race) -->
+        <div id="race-hud" class="race-hud hidden">
+          <div class="race-chip"><span class="race-chip-label">LAP</span><span id="race-lap">1/2</span></div>
+          <div class="race-chip"><span class="race-chip-label">POS</span><span id="race-pos" class="lead">1st</span></div>
+        </div>
         <button id="btn-fullscreen-game" class="hud-icon-btn">⛶</button>
       </div>
+
+      <!-- Race countdown -->
+      <div id="countdown" class="countdown hidden">3</div>
 
       <div class="speedo">
         <span id="speed-value">0</span>
@@ -193,6 +217,16 @@
         <button id="btn-resume" class="btn btn-play btn-full">Resume</button>
         <button id="btn-restart" class="btn btn-chip btn-full">Reset Car</button>
         <button id="btn-quit" class="btn btn-chip btn-full">Main Menu</button>
+      </div>
+    </div>
+
+    <!-- Race finish overlay -->
+    <div id="race-finish" class="pause-overlay hidden">
+      <div class="pause-card">
+        <h2 id="finish-title">🏆 You Win!</h2>
+        <p id="finish-sub" class="finish-sub">Clean driving out there.</p>
+        <button id="btn-race-restart" class="btn btn-play btn-full">Race Again</button>
+        <button id="btn-race-menu" class="btn btn-chip btn-full">Main Menu</button>
       </div>
     </div>
   </div>

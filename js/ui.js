@@ -12,6 +12,7 @@ function loadSettings() {
   const def = {
     sound: true, smoke: true, skids: true, shake: true,
     quality: 'medium', carColor: DEFAULT_CAR_COLOR,
+    map: 'forest', mode: 'free',
   };
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
@@ -245,6 +246,23 @@ function normalizeHex(hex) {
   if (h[0] !== '#') h = '#' + h;
   if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
   return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : '#ff3b3b';
+}
+
+// ---------- Map / Mode segmented selectors ----------
+export function wireSelectors(onChange) {
+  const wire = (containerId, attr, key) => {
+    const buttons = [...document.querySelectorAll(`#${containerId} .seg`)];
+    const mark = (val) => buttons.forEach((b) => b.classList.toggle('selected', b.dataset[attr] === val));
+    mark(settings[key]);
+    buttons.forEach((b) => b.addEventListener('click', () => {
+      settings[key] = b.dataset[attr];
+      saveSettings();
+      mark(settings[key]);
+      onChange && onChange(settings);
+    }));
+  };
+  wire('map-select', 'map', 'map');
+  wire('mode-select', 'mode', 'mode');
 }
 
 // ---------- Rotate hint ----------

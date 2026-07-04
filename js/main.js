@@ -4,7 +4,7 @@
 import { Game } from './game.js';
 import {
   settings, MenuPreview, goFullscreen, show, hide,
-  wireSettings, wireColorPicker, updateRotateHint,
+  wireSettings, wireColorPicker, wireSelectors, updateRotateHint,
 } from './ui.js';
 import { initTouchControls, initKeyboardControls } from './controls.js';
 
@@ -81,11 +81,22 @@ function init() {
     if (game) game.setCarColor(hex);
   });
 
+  // Map + mode segmented selectors.
+  wireSelectors();
+
   // ---- Pause menu ----
   document.getElementById('btn-pause').addEventListener('click', pauseGame);
   document.getElementById('btn-resume').addEventListener('click', resumeGame);
   document.getElementById('btn-restart').addEventListener('click', () => { game.resetCar(); resumeGame(); });
   document.getElementById('btn-quit').addEventListener('click', quitToMenu);
+
+  // ---- Race finish overlay ----
+  document.getElementById('btn-race-restart').addEventListener('click', () => {
+    hide('race-finish');
+    game.restartRace();
+    state = 'game';
+  });
+  document.getElementById('btn-race-menu').addEventListener('click', quitToMenu);
 
   // ---- Resize / orientation / fullscreen ----
   window.addEventListener('resize', onResize);
@@ -105,15 +116,16 @@ function init() {
 
 function startGame() {
   if (!game) game = new Game(document.getElementById('game-canvas'), settings);
-  game.applySettings(settings);
 
   hide('menu');
+  hide('race-finish');
+  hide('pause-overlay');
   if (preview) preview.setRunning(false);
   show('game');
   state = 'game';
 
   requestAnimationFrame(() => {
-    game.start();
+    game.start({ mode: settings.mode, track: settings.map });
     game.setCarColor(settings.carColor);
     game.resize();
     updateRotateHint(true);
@@ -145,7 +157,7 @@ function quitToMenu() {
 }
 
 function onResize() {
-  if (game && game.built) game.resize();
+  if (game && game.scene) game.resize();
   if (preview) preview.resize();
   updateRotateHint(state === 'game' || state === 'paused');
 }

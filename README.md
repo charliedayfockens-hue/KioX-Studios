@@ -33,8 +33,9 @@ More games are on the way.
 
 ### 🏎️ KioX Drift
 
-A 3D mobile drift arena. Slide the car around a floodlit parking-lot map, lay
-down smoke and skid marks, and chase a bigger drift score.
+A 3D mobile drift game. Slide across wide low-poly tracks, lay down smoke and
+skid marks, chase a bigger drift score in **Free Drift**, or race a skilled
+drifting AI in **AI Race**.
 
 **Controls**
 
@@ -43,11 +44,14 @@ down smoke and skid marks, and chase a bigger drift score.
 
 **Highlights**
 
-- Polished mobile main menu with an animated 3D car preview
-- Fullscreen + landscape support with a rotate hint
-- A 3D drift arena (asphalt, markings, barriers, cones, buildings, lights)
-- A drift car built from primitives with steering front wheels and body roll
-- Arcade drift physics, tire smoke, skid marks and a live drift score
+- Two maps: **🌲 Forest** and **🏜️ Desert**, each with wide curvy tracks
+  (straights, sweepers, S-curves and a hairpin) and their own scenery, sky and lighting
+- Two modes: **Free Drift** (endless practice + drift score) and **AI Race**
+  (2 laps vs a drifting AI, with a 3·2·1·GO countdown, lap counter, position and winner screen)
+- Slippery arcade drift physics — long glides, big holdable angles, 360 spins,
+  tire smoke and skid marks
+- Custom car colour (presets + full colour picker), saved between sessions
+- Polished mobile menu with an animated 3D car preview, fullscreen + landscape support
 - A smooth 3D follow camera
 
 ## Tech
@@ -76,9 +80,10 @@ css/style.css           # menu + HUD styling
 js/
   main.js               # app wiring (menu <-> game)
   ui.js                 # menu, settings, fullscreen, 3D car preview
-  game.js               # renderer, follow camera, main loop, HUD
-  world.js              # the 3D drift arena
+  game.js               # renderer, follow camera, main loop, race system, HUD
+  world.js              # Forest + Desert tracks (themed low-poly scenery)
   car.js                # the drift car + arcade physics
+  ai.js                 # AI Race opponent (racing line + corner drifting)
   effects.js            # tire smoke + skid marks
   audio.js              # procedural engine / tire sound
   controls.js           # touch + keyboard input
