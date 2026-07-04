@@ -19,32 +19,43 @@ export class Car {
     this.setBodyColor(color);
 
     // ---- Physics state ----
-    this.pos = new THREE.Vector3(0, 0, 30);
-    this.yaw = Math.PI;          // facing -Z initially
+    this.startPos = new THREE.Vector3(0, 0, 30);
+    this.startYaw = Math.PI;
+    this.pos = this.startPos.clone();
+    this.yaw = this.startYaw;     // facing -Z initially
     this.vLong = 0;              // local forward velocity (m/s)
     this.vLat = 0;               // local lateral velocity (m/s)
     this.wheelSpin = 0;          // accumulated wheel rotation
     this.steerAngle = 0;         // visual front-wheel steer
 
-    // ---- Tuning: exaggerated, slippery arcade feel ----
-    this.enginePower = 36;       // accel force
-    this.reversePower = 16;
-    this.brakePower = 48;
-    this.maxSpeed = 48;
-    this.maxReverse = 13;
-    this.turnRate = 2.75;        // rad/s at reference speed (sharper)
+    // ---- Tuning: slower car, very slippery, easy arcade drifting ----
+    this.enginePower = 24;       // gentler acceleration
+    this.reversePower = 12;
+    this.brakePower = 40;
+    this.maxSpeed = 30;          // lower top speed (was 48)
+    this.maxReverse = 10;
+    this.turnRate = 2.4;         // rad/s at reference speed
 
-    // Grip is deliberately LOW so the car slides easily.
-    this.baseGrip = 2.6;         // normal lateral grip (was 6.0 → much lower)
-    this.handbrakeGrip = 0.45;   // grip while handbraking (near-frictionless)
-    this.driftPush = 1.7;        // how much cornering throws the rear out
-    this.handbrakeKick = 3.4;    // sideways impulse when handbrake is tapped
-    this.rollingDrag = 0.42;     // low drag → keeps momentum while sliding
+    // Grip is deliberately VERY LOW so the car slides easily and holds it.
+    this.baseGrip = 1.7;         // normal lateral grip (lower → more slide)
+    this.handbrakeGrip = 0.4;    // grip while handbraking (strong slide)
+    this.driftPush = 1.9;        // cornering throws the rear out more
+    this.handbrakeKick = 2.4;    // sideways impulse when handbrake held (controllable)
+    this.rollingDrag = 0.5;      // moderate drag → car naturally stays slow
+    this.lateralDrag = 0.35;     // gentle drag on the slide (long momentum)
 
     this.driftAmount = 0;        // 0..1 smoothed drift intensity (for effects)
     this.driftAngle = 0;
     this.speed = 0;
     this.speedKmh = 0;
+  }
+
+  // Place the car at a track start point (called after the world is built).
+  setStart(start) {
+    if (!start) return;
+    this.startPos.set(start.x, 0, start.z);
+    this.startYaw = start.yaw;
+    this.reset();
   }
 
   _buildMesh() {
@@ -144,11 +155,13 @@ export class Car {
   }
 
   reset() {
-    this.pos.set(0, 0, 30);
-    this.yaw = Math.PI;
+    this.pos.copy(this.startPos);
+    this.pos.y = 0;
+    this.yaw = this.startYaw;
     this.vLong = 0;
     this.vLat = 0;
     this.driftAmount = 0;
+    this.body.rotation.set(0, 0, 0);
   }
 
   update(dt, input) {
@@ -169,33 +182,37 @@ export class Car {
 
     // ---- Steering ----
     const speed = Math.hypot(this.vLong, this.vLat);
-    const speedFactor = Math.min(1, speed / 9); // steering bites in quickly
+    // Car is slower now, so let steering bite at a lower speed.
+    const speedFactor = Math.min(1, speed / 6);
     const dir = this.vLong >= 0 ? 1 : -1;
     const targetSteer = input.steer * 0.6; // max visual steer (rad)
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 10 * dt);
+    // Ease the wheels toward target so steering never snaps instantly.
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 8 * dt);
 
     const turn = input.steer * this.turnRate * speedFactor * dir;
     this.yaw -= turn * dt;
 
     // ---- Lateral dynamics (the drift) ----
-    // Cornering hard throws the rear out (more push than before).
+    // Cornering throws the rear out — easy to break traction.
     this.vLat += turn * this.vLong * dt * this.driftPush;
 
-    // Handbrake: strong sideways kick + near-zero grip.
+    // Handbrake: strong but controllable sideways kick + low grip.
     let grip = this.baseGrip;
     if (input.handbrake) {
       grip = this.handbrakeGrip;
-      // Kick the tail out in the steer direction, scaled by speed.
       const kickDir = Math.abs(input.steer) > 0.05 ? Math.sign(input.steer) : (this.vLat >= 0 ? 1 : -1);
-      this.vLat += kickDir * Math.min(Math.abs(this.vLong), 22) * this.handbrakeKick * dt;
-      this.vLong -= this.vLong * 0.5 * dt; // slight scrub
+      this.vLat += kickDir * Math.min(Math.abs(this.vLong), 16) * this.handbrakeKick * dt;
+      this.vLong -= this.vLong * 0.45 * dt; // slight scrub
     }
 
-    // Grip bleeds lateral velocity — with breakaway so fast slides keep sliding.
-    const gripDynamic = grip * (1 - Math.min(0.72, Math.abs(this.vLat) * 0.045));
+    // Grip bleeds lateral velocity. Breakaway keeps fast slides sliding, and
+    // recovery is gentle so the car eases back straight (never snaps).
+    const gripDynamic = grip * (1 - Math.min(0.78, Math.abs(this.vLat) * 0.05));
     this.vLat -= this.vLat * gripDynamic * dt;
+    // A small constant lateral drag so momentum carries a long time.
+    this.vLat -= this.vLat * this.lateralDrag * dt;
     // Clamp absurd slides.
-    this.vLat = Math.max(-30, Math.min(30, this.vLat));
+    this.vLat = Math.max(-26, Math.min(26, this.vLat));
 
     // ---- Integrate position ----
     const fx = sin, fz = cos;   // forward
@@ -227,16 +244,20 @@ export class Car {
   }
 
   _applyVisuals(dt, input) {
-    this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
+    // Vertical position is LOCKED to the ground — the car never leaves y=0,
+    // so it can't tip over or fly. Roll/pitch below are cosmetic only.
+    this.pos.y = 0;
+    this.group.position.set(this.pos.x, 0, this.pos.z);
     this.group.rotation.y = this.yaw;
 
-    // Bigger, more dramatic body roll from lateral velocity.
-    const targetRoll = THREE.MathUtils.clamp(-this.vLat * 0.045, -0.34, 0.34);
+    // Subtle cosmetic body lean from lateral velocity (kept small so the car
+    // reads as planted, not flipping).
+    const targetRoll = THREE.MathUtils.clamp(-this.vLat * 0.016, -0.11, 0.11);
     const targetPitch = THREE.MathUtils.clamp(
-      (input.gas ? -0.06 : 0) + (input.brake ? 0.07 : 0) + this.vLong * 0.0006,
-      -0.12, 0.14
+      (input.gas ? -0.04 : 0) + (input.brake ? 0.05 : 0) + this.vLong * 0.0004,
+      -0.08, 0.09
     );
-    this.body.rotation.z += (targetRoll - this.body.rotation.z) * Math.min(1, 7 * dt);
+    this.body.rotation.z += (targetRoll - this.body.rotation.z) * Math.min(1, 6 * dt);
     this.body.rotation.x += (targetPitch - this.body.rotation.x) * Math.min(1, 6 * dt);
 
     // Wheel spin proportional to forward speed.

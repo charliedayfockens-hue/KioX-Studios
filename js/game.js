@@ -42,19 +42,21 @@ export class Game {
     this.camera = new THREE.PerspectiveCamera(62, 1, 0.1, 900);
     this.camera.position.set(0, 8, 45);
 
-    const { sun } = buildWorld(this.scene, q);
+    const { sun, start } = buildWorld(this.scene, q);
     this.sun = sun;
 
     this.car = new Car(this.scene, this.settings.carColor);
+    this.car.setStart(start);
     this.smoke = new SmokePuffs(this.scene, q === 'low' ? 110 : 220);
     this.skids = new SkidMarks(this.scene, q === 'low' ? 400 : 900);
 
     this.smoke.enabled = this.settings.smoke;
     this.skids.enabled = this.settings.skids;
 
-    // Camera state (smoothed follow).
-    this._camPos = new THREE.Vector3(0, 8, 45);
-    this._camLook = new THREE.Vector3(0, 1, 30);
+    // Camera state (smoothed follow) — start it behind the car.
+    const cs = Math.sin(this.car.yaw), cc = Math.cos(this.car.yaw);
+    this._camPos = new THREE.Vector3(this.car.pos.x - cs * 12, 6, this.car.pos.z - cc * 12);
+    this._camLook = new THREE.Vector3(this.car.pos.x + cs * 6, 1.4, this.car.pos.z + cc * 6);
     this._shake = 0;
 
     this._cacheHud();

@@ -5,8 +5,9 @@
 
 import * as THREE from 'three';
 
-export const ARENA_HALF = 80; // half-size of the play area (meters)
+export const ARENA_HALF = 115; // half-size of the play area (meters)
 export const TRACK_NAME = 'Forest';
+export const ROAD_WIDTH = 30;  // much wider road → plenty of room to slide
 
 export function buildWorld(scene, quality = 'medium') {
   const group = new THREE.Group();
@@ -75,17 +76,30 @@ export function buildWorld(scene, quality = 'medium') {
   infield.receiveShadow = quality !== 'low';
   group.add(infield);
 
-  // ---- The curvy drift road ----
+  // ---- The curvy drift road: straights, sweepers, an S and a hairpin ----
   const roadCurve = new THREE.CatmullRomCurve3(
     [
-      [0, 58], [42, 42], [58, 2], [40, -38], [4, -58],
-      [-40, -40], [-58, 4], [-40, 42],
+      [-8, 92],   // top straight
+      [48, 86],
+      [90, 56],   // long right sweeper
+      [88, 14],
+      [56, -8],   // S entry (tucks in)
+      [90, -42],  // S exit
+      [74, -82],  // right-bottom
+      [22, -94],  // bottom straight
+      [-36, -88],
+      [-80, -74],
+      [-96, -36], // bottom-left sweeper
+      [-56, -12], // tighter inward turn (hairpin feel)
+      [-88, 16],
+      [-82, 62],  // left sweeper
+      [-40, 88],
     ].map(([x, z]) => new THREE.Vector3(x, 0, z)),
     true,
     'catmullrom',
     0.5
   );
-  const roadSamples = roadCurve.getPoints(220);
+  const roadSamples = roadCurve.getPoints(320);
   buildRoad(group, roadSamples, quality);
 
   // ---- Wooden guardrails around the play area ----
@@ -100,13 +114,18 @@ export function buildWorld(scene, quality = 'medium') {
   // ---- Background hills ----
   addHills(group);
 
-  return { group, sun, roadSamples };
+  // Start point: on the road, facing along the direction of travel.
+  const s0 = roadSamples[0];
+  const s1 = roadSamples[3];
+  const start = { x: s0.x, z: s0.z, yaw: Math.atan2(s1.x - s0.x, s1.z - s0.z) };
+
+  return { group, sun, roadSamples, start };
 }
 
 // Build a flat ribbon of asphalt following the curve, plus white edge lines
 // and a dashed centre line.
 function buildRoad(group, samples, quality) {
-  const width = 17;
+  const width = ROAD_WIDTH;
   const half = width / 2;
   const asphalt = new THREE.MeshStandardMaterial({ color: 0x41474f, roughness: 0.95 });
   const edgeMat = new THREE.MeshStandardMaterial({ color: 0xf3f6fa, roughness: 0.8 });
@@ -256,7 +275,7 @@ function addTrees(group, roadSamples, quality) {
     new THREE.MeshStandardMaterial({ color: 0x277d33, roughness: 0.95, flatShading: true }),
   ];
 
-  const roadClear = 12; // keep trees this far from the road centreline
+  const roadClear = ROAD_WIDTH / 2 + 7; // keep trees clear of the wider road
   const tooCloseToRoad = (x, z) => {
     for (let i = 0; i < roadSamples.length; i += 3) {
       const p = roadSamples[i];
@@ -266,13 +285,13 @@ function addTrees(group, roadSamples, quality) {
     return false;
   };
 
-  const target = quality === 'low' ? 34 : 60;
+  const target = quality === 'low' ? 44 : 78;
   let placed = 0, attempts = 0;
   while (placed < target && attempts < target * 12) {
     attempts++;
-    // Ring: mostly near the edges + a central island.
-    const inner = Math.random() < 0.35;
-    const r = inner ? Math.random() * 22 : 64 + Math.random() * 60;
+    // Ring: mostly near/outside the edges + a small central island.
+    const inner = Math.random() < 0.28;
+    const r = inner ? Math.random() * 26 : 70 + Math.random() * 80;
     const a = Math.random() * Math.PI * 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (Math.abs(x) < ARENA_HALF - 3 && Math.abs(z) < ARENA_HALF - 3 && tooCloseToRoad(x, z)) continue;

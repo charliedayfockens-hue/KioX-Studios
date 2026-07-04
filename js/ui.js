@@ -34,29 +34,29 @@ export class MenuPreview {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0b0e14);
-    this.scene.fog = new THREE.Fog(0x0b0e14, 14, 40);
+    this.scene.background = new THREE.Color(0x0e1626);
+    this.scene.fog = new THREE.Fog(0x0e1626, 16, 42);
 
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
     this.camera.position.set(6, 3.4, 7.5);
     this.camera.lookAt(0, 0.8, 0);
 
-    this.scene.add(new THREE.HemisphereLight(0x8090ff, 0x101018, 0.8));
-    const key = new THREE.DirectionalLight(0xffffff, 2.0);
-    key.position.set(5, 8, 4);
+    // Calm, soft lighting — one key + one gentle cyan rim (no clashing colors).
+    this.scene.add(new THREE.HemisphereLight(0x9fb4e0, 0x161c2a, 0.9));
+    const key = new THREE.DirectionalLight(0xffffff, 1.8);
+    key.position.set(5, 9, 5);
     this.scene.add(key);
-    const rim = new THREE.PointLight(0x00e5ff, 2.4, 30); rim.position.set(-6, 2, -4); this.scene.add(rim);
-    const rim2 = new THREE.PointLight(0xff2d75, 2.0, 30); rim2.position.set(6, 1, -5); this.scene.add(rim2);
+    const rim = new THREE.PointLight(0x38d6ff, 1.4, 30); rim.position.set(-6, 2.5, -4); this.scene.add(rim);
 
     const floor = new THREE.Mesh(
       new THREE.CircleGeometry(9, 48),
-      new THREE.MeshStandardMaterial({ color: 0x11151f, roughness: 0.35, metalness: 0.5 })
+      new THREE.MeshStandardMaterial({ color: 0x121a2b, roughness: 0.5, metalness: 0.3 })
     );
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
 
-    const grid = new THREE.GridHelper(18, 18, 0x00e5ff, 0x1c2436);
-    grid.material.opacity = 0.3; grid.material.transparent = true;
+    const grid = new THREE.GridHelper(18, 18, 0x2a3a58, 0x1a2438);
+    grid.material.opacity = 0.16; grid.material.transparent = true;
     this.scene.add(grid);
 
     this.car = new Car(this.scene, settings.carColor);
@@ -216,22 +216,42 @@ export function wireSettings(onChange) {
   });
 }
 
-// ---------- Car color picker ----------
+// ---------- Car color picker (presets + full custom color) ----------
 export function wireColorPicker(onColor) {
   const swatches = [...document.querySelectorAll('#color-picker .swatch')];
+  const custom = document.getElementById('custom-color');
+
   const mark = (hex) => {
     swatches.forEach((s) => s.classList.toggle('selected', s.dataset.color.toLowerCase() === hex.toLowerCase()));
   };
+
+  const apply = (hex) => {
+    settings.carColor = hex;
+    saveSettings();
+    mark(hex);
+    if (custom) custom.value = normalizeHex(hex);
+    onColor(hex);
+  };
+
+  // Init from saved setting.
   mark(settings.carColor);
-  swatches.forEach((s) => {
-    s.addEventListener('click', () => {
-      const hex = s.dataset.color;
-      settings.carColor = hex;
-      saveSettings();
-      mark(hex);
-      onColor(hex);
-    });
-  });
+  if (custom) custom.value = normalizeHex(settings.carColor);
+
+  swatches.forEach((s) => s.addEventListener('click', () => apply(s.dataset.color)));
+
+  // Full custom color — updates live as the user drags.
+  if (custom) {
+    custom.addEventListener('input', () => apply(custom.value));
+    custom.addEventListener('change', () => apply(custom.value));
+  }
+}
+
+// <input type=color> only accepts #rrggbb; coerce shorthand/uppercase safely.
+function normalizeHex(hex) {
+  let h = String(hex).trim();
+  if (h[0] !== '#') h = '#' + h;
+  if (h.length === 4) h = '#' + h[1] + h[1] + h[2] + h[2] + h[3] + h[3];
+  return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : '#ff3b3b';
 }
 
 // ---------- Rotate hint ----------

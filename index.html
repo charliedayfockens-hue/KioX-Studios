@@ -6,12 +6,12 @@
     name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover"
   />
-  <meta name="theme-color" content="#0b0e14" />
+  <meta name="theme-color" content="#0e1626" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>KioX Drift — Forest</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e14'/%3E%3Ctext y='74' x='50' font-size='64' text-anchor='middle'%3E%F0%9F%8F%8E%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230e1626'/%3E%3Ctext y='74' x='50' font-size='64' text-anchor='middle'%3E%F0%9F%8F%8E%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./css/style.css" />
 
   <!-- Three.js via import map. Vendored locally → no CDN dependency to break. -->
@@ -27,40 +27,35 @@
   <!-- ============ MAIN MENU ============ -->
   <div id="menu" class="screen">
     <canvas id="menu-canvas"></canvas>
-    <div class="menu-overlay">
-      <div class="menu-top">
-        <div class="brand">
-          <span class="brand-kiox">KIOX</span>
-          <span class="brand-sub">STUDIOS</span>
-        </div>
-      </div>
-
-      <div class="menu-center">
-        <div class="track-chip">🌲 FOREST TRACK</div>
-        <h1 class="game-title">
-          <span class="title-line-1">DRIFT</span>
-          <span class="title-line-2">ARENA</span>
-        </h1>
-        <p class="tagline">Slide. Smoke. Score.</p>
-
-        <div class="menu-buttons">
-          <button id="btn-play" class="btn btn-play">
-            <span class="btn-shine"></span>
-            <span class="btn-label">▶ PLAY</span>
-          </button>
-          <div class="btn-row">
-            <button id="btn-fullscreen-menu" class="btn btn-chip">
-              <span class="btn-label">⛶ Fullscreen</span>
-            </button>
-            <button id="btn-settings" class="btn btn-chip">
-              <span class="btn-label">⚙ Settings</span>
-            </button>
+    <!-- Scrollable wrapper so every control is reachable in short landscape -->
+    <div class="menu-scroll">
+      <div class="menu-inner">
+        <div class="menu-card">
+          <div class="brand">
+            <span class="brand-kiox">KIOX</span>
+            <span class="brand-sub">STUDIOS</span>
           </div>
-        </div>
-      </div>
 
-      <div class="menu-bottom">
-        <span class="hint">Best played sideways with sound on 🔊</span>
+          <div class="track-chip">🌲 Forest</div>
+
+          <h1 class="game-title">
+            <span>DRIFT</span>
+            <span>ARENA</span>
+          </h1>
+          <p class="tagline">Slide · Smoke · Score</p>
+
+          <div class="menu-buttons">
+            <button id="btn-play" class="btn btn-play">
+              <span class="btn-label">▶ PLAY</span>
+            </button>
+            <div class="btn-row">
+              <button id="btn-fullscreen-menu" class="btn btn-chip">⛶ Fullscreen</button>
+              <button id="btn-settings" class="btn btn-chip">⚙ Settings</button>
+            </div>
+          </div>
+
+          <p class="hint">Best played sideways with sound on 🔊</p>
+        </div>
       </div>
     </div>
   </div>
@@ -68,9 +63,9 @@
   <!-- ============ SETTINGS MODAL ============ -->
   <div id="settings-modal" class="modal hidden">
     <div class="modal-card">
-      <h2>⚙ Settings</h2>
+      <h2>Settings</h2>
 
-      <!-- Car color picker -->
+      <!-- Car color -->
       <div class="setting-block">
         <span class="setting-title">Car Color</span>
         <div id="color-picker" class="color-picker">
@@ -83,10 +78,14 @@
           <button class="swatch" data-color="#20242c" style="--sw:#20242c" aria-label="Black"></button>
           <button class="swatch" data-color="#ff8a1e" style="--sw:#ff8a1e" aria-label="Orange"></button>
         </div>
+        <label class="custom-color-row">
+          <span>Custom color</span>
+          <input type="color" id="custom-color" class="custom-color" value="#ff3b3b" />
+        </label>
       </div>
 
       <label class="setting-row">
-        <span>🔊 Sound Effects</span>
+        <span>Sound Effects</span>
         <span class="toggle">
           <input type="checkbox" id="set-sound" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -94,7 +93,7 @@
       </label>
 
       <label class="setting-row">
-        <span>💨 Tire Smoke</span>
+        <span>Tire Smoke</span>
         <span class="toggle">
           <input type="checkbox" id="set-smoke" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -102,7 +101,7 @@
       </label>
 
       <label class="setting-row">
-        <span>🛞 Skid Marks</span>
+        <span>Skid Marks</span>
         <span class="toggle">
           <input type="checkbox" id="set-skids" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -110,7 +109,7 @@
       </label>
 
       <label class="setting-row">
-        <span>🎥 Camera Shake</span>
+        <span>Camera Shake</span>
         <span class="toggle">
           <input type="checkbox" id="set-shake" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -118,7 +117,7 @@
       </label>
 
       <label class="setting-row column">
-        <span>✨ Graphics Quality</span>
+        <span>Graphics Quality</span>
         <select id="set-quality">
           <option value="low">Low</option>
           <option value="medium" selected>Medium</option>
@@ -140,7 +139,6 @@
   <div id="game" class="screen hidden">
     <canvas id="game-canvas"></canvas>
 
-    <!-- Loading -->
     <div id="loading" class="loading hidden">
       <div class="spinner"></div>
       <p>Loading Forest…</p>
@@ -163,7 +161,6 @@
         <button id="btn-fullscreen-game" class="hud-icon-btn">⛶</button>
       </div>
 
-      <!-- Speedometer -->
       <div class="speedo">
         <span id="speed-value">0</span>
         <span class="speed-unit">km/h</span>
@@ -190,7 +187,7 @@
     <!-- Pause overlay -->
     <div id="pause-overlay" class="pause-overlay hidden">
       <div class="pause-card">
-        <h2>⏸ Paused</h2>
+        <h2>Paused</h2>
         <button id="btn-resume" class="btn btn-play btn-full">Resume</button>
         <button id="btn-restart" class="btn btn-chip btn-full">Reset Car</button>
         <button id="btn-quit" class="btn btn-chip btn-full">Main Menu</button>
