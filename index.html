@@ -10,13 +10,11 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>KioX Drift — Mobile Drift Arena</title>
+  <title>KioX Drift — Forest</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%230b0e14'/%3E%3Ctext y='74' x='50' font-size='64' text-anchor='middle'%3E%F0%9F%8F%8E%EF%B8%8F%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="./css/style.css" />
 
-  <!-- Three.js via import map. The library is vendored locally (js/vendor)
-       so the game works on GitHub Pages with zero external dependencies —
-       no CDN outage, CORS, or offline issues. -->
+  <!-- Three.js via import map. Vendored locally → no CDN dependency to break. -->
   <script type="importmap">
     {
       "imports": {
@@ -38,6 +36,7 @@
       </div>
 
       <div class="menu-center">
+        <div class="track-chip">🌲 FOREST TRACK</div>
         <h1 class="game-title">
           <span class="title-line-1">DRIFT</span>
           <span class="title-line-2">ARENA</span>
@@ -45,15 +44,15 @@
         <p class="tagline">Slide. Smoke. Score.</p>
 
         <div class="menu-buttons">
-          <button id="btn-play" class="btn btn-primary">
-            <span class="btn-glow"></span>
-            <span class="btn-label">▸ PLAY</span>
+          <button id="btn-play" class="btn btn-play">
+            <span class="btn-shine"></span>
+            <span class="btn-label">▶ PLAY</span>
           </button>
           <div class="btn-row">
-            <button id="btn-fullscreen-menu" class="btn btn-secondary">
+            <button id="btn-fullscreen-menu" class="btn btn-chip">
               <span class="btn-label">⛶ Fullscreen</span>
             </button>
-            <button id="btn-settings" class="btn btn-secondary">
+            <button id="btn-settings" class="btn btn-chip">
               <span class="btn-label">⚙ Settings</span>
             </button>
           </div>
@@ -69,10 +68,25 @@
   <!-- ============ SETTINGS MODAL ============ -->
   <div id="settings-modal" class="modal hidden">
     <div class="modal-card">
-      <h2>Settings</h2>
+      <h2>⚙ Settings</h2>
+
+      <!-- Car color picker -->
+      <div class="setting-block">
+        <span class="setting-title">Car Color</span>
+        <div id="color-picker" class="color-picker">
+          <button class="swatch" data-color="#ff3b3b" style="--sw:#ff3b3b" aria-label="Red"></button>
+          <button class="swatch" data-color="#2f9bff" style="--sw:#2f9bff" aria-label="Blue"></button>
+          <button class="swatch" data-color="#34c759" style="--sw:#34c759" aria-label="Green"></button>
+          <button class="swatch" data-color="#ffd23f" style="--sw:#ffd23f" aria-label="Yellow"></button>
+          <button class="swatch" data-color="#a35bff" style="--sw:#a35bff" aria-label="Purple"></button>
+          <button class="swatch" data-color="#f4f6fa" style="--sw:#f4f6fa" aria-label="White"></button>
+          <button class="swatch" data-color="#20242c" style="--sw:#20242c" aria-label="Black"></button>
+          <button class="swatch" data-color="#ff8a1e" style="--sw:#ff8a1e" aria-label="Orange"></button>
+        </div>
+      </div>
 
       <label class="setting-row">
-        <span>Sound Effects</span>
+        <span>🔊 Sound Effects</span>
         <span class="toggle">
           <input type="checkbox" id="set-sound" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -80,7 +94,7 @@
       </label>
 
       <label class="setting-row">
-        <span>Tire Smoke</span>
+        <span>💨 Tire Smoke</span>
         <span class="toggle">
           <input type="checkbox" id="set-smoke" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -88,7 +102,7 @@
       </label>
 
       <label class="setting-row">
-        <span>Skid Marks</span>
+        <span>🛞 Skid Marks</span>
         <span class="toggle">
           <input type="checkbox" id="set-skids" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -96,7 +110,7 @@
       </label>
 
       <label class="setting-row">
-        <span>Camera Shake</span>
+        <span>🎥 Camera Shake</span>
         <span class="toggle">
           <input type="checkbox" id="set-shake" checked />
           <span class="toggle-track"><span class="toggle-thumb"></span></span>
@@ -104,7 +118,7 @@
       </label>
 
       <label class="setting-row column">
-        <span>Graphics Quality</span>
+        <span>✨ Graphics Quality</span>
         <select id="set-quality">
           <option value="low">Low</option>
           <option value="medium" selected>Medium</option>
@@ -112,7 +126,7 @@
         </select>
       </label>
 
-      <button id="btn-settings-close" class="btn btn-primary btn-full">Done</button>
+      <button id="btn-settings-close" class="btn btn-play btn-full">Done</button>
     </div>
   </div>
 
@@ -129,7 +143,7 @@
     <!-- Loading -->
     <div id="loading" class="loading hidden">
       <div class="spinner"></div>
-      <p>Loading arena…</p>
+      <p>Loading Forest…</p>
     </div>
 
     <!-- HUD -->
@@ -142,7 +156,7 @@
             <span id="drift-current" class="drift-current"></span>
           </div>
           <div class="drift-total">
-            <span class="drift-total-label">TOTAL</span>
+            <span class="drift-total-label">SCORE</span>
             <span id="drift-total-value">0</span>
           </div>
         </div>
@@ -155,16 +169,20 @@
         <span class="speed-unit">km/h</span>
       </div>
 
-      <!-- Left controls -->
+      <!-- Left controls: handbrake ABOVE the two steer buttons -->
       <div class="controls controls-left">
-        <button class="ctrl ctrl-steer" id="ctrl-left" data-key="left">‹</button>
-        <button class="ctrl ctrl-steer" id="ctrl-right" data-key="right">›</button>
+        <button class="ctrl ctrl-handbrake" id="ctrl-handbrake" data-key="handbrake">
+          <span class="ctrl-emoji">✋</span><span class="ctrl-text">DRIFT</span>
+        </button>
+        <div class="steer-row">
+          <button class="ctrl ctrl-steer" id="ctrl-left" data-key="left">‹</button>
+          <button class="ctrl ctrl-steer" id="ctrl-right" data-key="right">›</button>
+        </div>
       </div>
 
-      <!-- Right controls -->
+      <!-- Right controls: brake + gas -->
       <div class="controls controls-right">
         <button class="ctrl ctrl-brake" id="ctrl-brake" data-key="brake">⌄</button>
-        <button class="ctrl ctrl-handbrake" id="ctrl-handbrake" data-key="handbrake">P</button>
         <button class="ctrl ctrl-gas" id="ctrl-gas" data-key="gas">⌃</button>
       </div>
     </div>
@@ -172,10 +190,10 @@
     <!-- Pause overlay -->
     <div id="pause-overlay" class="pause-overlay hidden">
       <div class="pause-card">
-        <h2>Paused</h2>
-        <button id="btn-resume" class="btn btn-primary btn-full">Resume</button>
-        <button id="btn-restart" class="btn btn-secondary btn-full">Reset Car</button>
-        <button id="btn-quit" class="btn btn-secondary btn-full">Main Menu</button>
+        <h2>⏸ Paused</h2>
+        <button id="btn-resume" class="btn btn-play btn-full">Resume</button>
+        <button id="btn-restart" class="btn btn-chip btn-full">Reset Car</button>
+        <button id="btn-quit" class="btn btn-chip btn-full">Main Menu</button>
       </div>
     </div>
   </div>

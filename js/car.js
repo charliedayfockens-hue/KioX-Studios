@@ -1,12 +1,14 @@
-// car.js — a game-ready drift car built from primitives, plus an arcade
-// drift physics model. The mesh reads clearly front-to-back, the front
-// wheels steer, all wheels spin, and the body rolls/pitches while driving.
+// car.js — a game-ready drift car built from primitives, plus an exaggerated
+// arcade drift physics model. The mesh reads clearly front-to-back, the front
+// wheels steer, all wheels spin, and the body rolls hard while drifting.
 
 import * as THREE from 'three';
 import { ARENA_HALF } from './world.js';
 
+export const DEFAULT_CAR_COLOR = '#ff2d55';
+
 export class Car {
-  constructor(scene) {
+  constructor(scene, color = DEFAULT_CAR_COLOR) {
     this.group = new THREE.Group();
     scene.add(this.group);
 
@@ -14,6 +16,7 @@ export class Car {
     this.group.add(this.body);
 
     this._buildMesh();
+    this.setBodyColor(color);
 
     // ---- Physics state ----
     this.pos = new THREE.Vector3(0, 0, 30);
@@ -23,50 +26,56 @@ export class Car {
     this.wheelSpin = 0;          // accumulated wheel rotation
     this.steerAngle = 0;         // visual front-wheel steer
 
-    // Tuning (arcade feel).
-    this.enginePower = 34;       // accel force
+    // ---- Tuning: exaggerated, slippery arcade feel ----
+    this.enginePower = 36;       // accel force
     this.reversePower = 16;
-    this.brakePower = 46;
-    this.maxSpeed = 46;
-    this.maxReverse = 12;
-    this.turnRate = 2.3;         // rad/s at reference speed
-    this.gripLat = 6.0;          // how fast lateral velocity bleeds (grip)
-    this.driftGrip = 1.6;        // grip while handbraking
-    this.rollingDrag = 0.6;
+    this.brakePower = 48;
+    this.maxSpeed = 48;
+    this.maxReverse = 13;
+    this.turnRate = 2.75;        // rad/s at reference speed (sharper)
+
+    // Grip is deliberately LOW so the car slides easily.
+    this.baseGrip = 2.6;         // normal lateral grip (was 6.0 → much lower)
+    this.handbrakeGrip = 0.45;   // grip while handbraking (near-frictionless)
+    this.driftPush = 1.7;        // how much cornering throws the rear out
+    this.handbrakeKick = 3.4;    // sideways impulse when handbrake is tapped
+    this.rollingDrag = 0.42;     // low drag → keeps momentum while sliding
 
     this.driftAmount = 0;        // 0..1 smoothed drift intensity (for effects)
+    this.driftAngle = 0;
+    this.speed = 0;
     this.speedKmh = 0;
   }
 
   _buildMesh() {
     const b = this.body;
 
-    // Chassis (lower box)
-    const chassisMat = new THREE.MeshStandardMaterial({ color: 0xff2d55, roughness: 0.35, metalness: 0.5 });
-    const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 4.2), chassisMat);
+    // Chassis (lower box) — colorable body
+    this.bodyMat = new THREE.MeshStandardMaterial({ roughness: 0.35, metalness: 0.45 });
+    const chassis = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.5, 4.2), this.bodyMat);
     chassis.position.y = 0.55;
     chassis.castShadow = true;
     b.add(chassis);
 
-    // Cabin (upper, offset back so the front reads as the nose)
-    const cabinMat = new THREE.MeshStandardMaterial({ color: 0xd6183d, roughness: 0.3, metalness: 0.5 });
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.0), cabinMat);
+    // Cabin (upper, offset back so the front reads as the nose) — darker body shade
+    this.cabinMat = new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.45 });
+    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.55, 2.0), this.cabinMat);
     cabin.position.set(0, 1.0, -0.25);
     cabin.castShadow = true;
     b.add(cabin);
 
-    // Windshield / windows (dark glass)
+    // Windshield / windows (dark glass — NOT recolored)
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x0a1420, roughness: 0.1, metalness: 0.8 });
     const glass = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.42, 1.6), glassMat);
     glass.position.set(0, 1.02, -0.15);
     b.add(glass);
 
-    // Nose wedge (front indicator)
-    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.35, 0.9), chassisMat);
+    // Nose wedge (front indicator) — body color
+    const nose = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.35, 0.9), this.bodyMat);
     nose.position.set(0, 0.5, 2.0);
     b.add(nose);
 
-    // Rear spoiler (back indicator)
+    // Rear spoiler (back indicator) — fixed dark
     const spoilerMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.5 });
     const wing = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.1, 0.5), spoilerMat);
     wing.position.set(0, 1.15, -2.05);
@@ -89,7 +98,7 @@ export class Car {
       b.add(tl);
     });
 
-    // ---- Wheels ----
+    // ---- Wheels (NOT recolored) ----
     const wheelGeo = new THREE.CylinderGeometry(0.5, 0.5, 0.4, 16);
     const wheelMat = new THREE.MeshStandardMaterial({ color: 0x111318, roughness: 0.85 });
     const rimMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.8 });
@@ -106,13 +115,11 @@ export class Car {
       return w;
     };
 
-    // wheel positions: FL, FR, RL, RR
     this.wheels = { fl: makeWheel(), fr: makeWheel(), rl: makeWheel(), rr: makeWheel() };
     const wy = 0.5;
     const wx = 1.05;
     const wzF = 1.4;
     const wzR = -1.5;
-    // Front wheels get a steer pivot group.
     this.frontLeftPivot = new THREE.Group();
     this.frontRightPivot = new THREE.Group();
     this.frontLeftPivot.position.set(-wx, wy, wzF);
@@ -126,6 +133,16 @@ export class Car {
     b.add(this.wheels.rl, this.wheels.rr);
   }
 
+  // Recolor only the body panels (chassis + nose + cabin). Cabin gets a
+  // slightly darker shade of the same color for a two-tone look.
+  setBodyColor(hex) {
+    this.color = hex;
+    const c = new THREE.Color(hex);
+    this.bodyMat.color.copy(c);
+    const darker = c.clone().multiplyScalar(0.78);
+    this.cabinMat.color.copy(darker);
+  }
+
   reset() {
     this.pos.set(0, 0, 30);
     this.yaw = Math.PI;
@@ -135,73 +152,68 @@ export class Car {
   }
 
   update(dt, input) {
-    // Local direction basis from yaw.
     const sin = Math.sin(this.yaw);
     const cos = Math.cos(this.yaw);
-    // forward = (sin, cos) in XZ ... we use +Z as forward reference below.
-    // We'll treat forward as (Math.sin(yaw), Math.cos(yaw)).
 
     // ---- Longitudinal forces ----
-    if (input.gas) {
-      this.vLong += this.enginePower * dt;
-    }
+    if (input.gas) this.vLong += this.enginePower * dt;
     if (input.brake) {
-      if (this.vLong > 0.5) {
-        this.vLong -= this.brakePower * dt;
-      } else {
-        this.vLong -= this.reversePower * dt; // reverse
-      }
+      if (this.vLong > 0.5) this.vLong -= this.brakePower * dt;
+      else this.vLong -= this.reversePower * dt; // reverse
     }
-    // Rolling drag + light air drag.
+    // Rolling + light air drag (low → momentum is preserved).
     this.vLong -= this.vLong * this.rollingDrag * dt;
-    this.vLong -= this.vLong * Math.abs(this.vLong) * 0.0016 * dt * 10;
-
-    // Clamp speed.
+    this.vLong -= this.vLong * Math.abs(this.vLong) * 0.014 * dt;
     this.vLong = Math.max(-this.maxReverse, Math.min(this.maxSpeed, this.vLong));
     if (Math.abs(this.vLong) < 0.02 && !input.gas && !input.brake) this.vLong = 0;
 
     // ---- Steering ----
     const speed = Math.hypot(this.vLong, this.vLat);
-    // Steering effectiveness scales with speed but caps out.
-    const speedFactor = Math.min(1, speed / 12);
+    const speedFactor = Math.min(1, speed / 9); // steering bites in quickly
     const dir = this.vLong >= 0 ? 1 : -1;
-    const targetSteer = input.steer * 0.55; // max visual steer (rad)
+    const targetSteer = input.steer * 0.6; // max visual steer (rad)
     this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 10 * dt);
 
     const turn = input.steer * this.turnRate * speedFactor * dir;
     this.yaw -= turn * dt;
 
     // ---- Lateral dynamics (the drift) ----
-    // Turning injects lateral velocity; grip bleeds it away.
-    this.vLat += turn * this.vLong * dt * 0.9;
+    // Cornering hard throws the rear out (more push than before).
+    this.vLat += turn * this.vLong * dt * this.driftPush;
 
-    let grip = this.gripLat;
-    if (input.handbrake) grip = this.driftGrip;
-    // Less grip at higher lateral speed (breakaway), more grip when slow.
-    const gripDynamic = grip * (1 - Math.min(0.55, Math.abs(this.vLat) * 0.03));
+    // Handbrake: strong sideways kick + near-zero grip.
+    let grip = this.baseGrip;
+    if (input.handbrake) {
+      grip = this.handbrakeGrip;
+      // Kick the tail out in the steer direction, scaled by speed.
+      const kickDir = Math.abs(input.steer) > 0.05 ? Math.sign(input.steer) : (this.vLat >= 0 ? 1 : -1);
+      this.vLat += kickDir * Math.min(Math.abs(this.vLong), 22) * this.handbrakeKick * dt;
+      this.vLong -= this.vLong * 0.5 * dt; // slight scrub
+    }
+
+    // Grip bleeds lateral velocity — with breakaway so fast slides keep sliding.
+    const gripDynamic = grip * (1 - Math.min(0.72, Math.abs(this.vLat) * 0.045));
     this.vLat -= this.vLat * gripDynamic * dt;
-
-    // Handbrake also scrubs a little forward speed.
-    if (input.handbrake) this.vLong -= this.vLong * 0.6 * dt;
+    // Clamp absurd slides.
+    this.vLat = Math.max(-30, Math.min(30, this.vLat));
 
     // ---- Integrate position ----
-    // forward vector (sin,cos), right vector (cos,-sin)
-    const fx = sin, fz = cos;
-    const rx = cos, rz = -sin;
+    const fx = sin, fz = cos;   // forward
+    const rx = cos, rz = -sin;  // right
     this.pos.x += (fx * this.vLong + rx * this.vLat) * dt;
     this.pos.z += (fz * this.vLong + rz * this.vLat) * dt;
 
     // ---- Arena bounds (soft wall) ----
     const lim = ARENA_HALF - 2.4;
     ['x', 'z'].forEach((ax) => {
-      if (this.pos[ax] > lim) { this.pos[ax] = lim; this._bounce(ax); }
-      if (this.pos[ax] < -lim) { this.pos[ax] = -lim; this._bounce(ax); }
+      if (this.pos[ax] > lim) { this.pos[ax] = lim; this._bounce(); }
+      if (this.pos[ax] < -lim) { this.pos[ax] = -lim; this._bounce(); }
     });
 
     // ---- Drift metric ----
     const driftAngle = Math.atan2(this.vLat, Math.abs(this.vLong) + 0.001);
-    const rawDrift = Math.min(1, Math.abs(driftAngle) / 0.6) * Math.min(1, speed / 8);
-    this.driftAmount += (rawDrift - this.driftAmount) * Math.min(1, 8 * dt);
+    const rawDrift = Math.min(1, Math.abs(driftAngle) / 0.5) * Math.min(1, speed / 7);
+    this.driftAmount += (rawDrift - this.driftAmount) * Math.min(1, 9 * dt);
     this.driftAngle = driftAngle;
     this.speed = speed;
     this.speedKmh = Math.round(Math.abs(this.vLong) * 3.6);
@@ -209,24 +221,22 @@ export class Car {
     this._applyVisuals(dt, input);
   }
 
-  _bounce(axis) {
-    // Kill velocity into the wall and add a small scrub.
+  _bounce() {
     this.vLong *= 0.4;
     this.vLat *= 0.4;
   }
 
   _applyVisuals(dt, input) {
-    // Position + yaw
     this.group.position.set(this.pos.x, this.pos.y, this.pos.z);
     this.group.rotation.y = this.yaw;
 
-    // Body roll from lateral velocity, pitch from acceleration.
-    const targetRoll = THREE.MathUtils.clamp(-this.vLat * 0.03, -0.22, 0.22);
+    // Bigger, more dramatic body roll from lateral velocity.
+    const targetRoll = THREE.MathUtils.clamp(-this.vLat * 0.045, -0.34, 0.34);
     const targetPitch = THREE.MathUtils.clamp(
-      (input.gas ? -0.05 : 0) + (input.brake ? 0.06 : 0) + this.vLong * 0.0006,
-      -0.1, 0.12
+      (input.gas ? -0.06 : 0) + (input.brake ? 0.07 : 0) + this.vLong * 0.0006,
+      -0.12, 0.14
     );
-    this.body.rotation.z += (targetRoll - this.body.rotation.z) * Math.min(1, 6 * dt);
+    this.body.rotation.z += (targetRoll - this.body.rotation.z) * Math.min(1, 7 * dt);
     this.body.rotation.x += (targetPitch - this.body.rotation.x) * Math.min(1, 6 * dt);
 
     // Wheel spin proportional to forward speed.
@@ -242,7 +252,6 @@ export class Car {
     this.frontRightPivot.rotation.y = this.steerAngle;
   }
 
-  // World positions of the two rear wheels (for smoke + skids).
   getRearWheelWorldPositions() {
     const out = [];
     for (const w of [this.wheels.rl, this.wheels.rr]) {

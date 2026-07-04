@@ -45,9 +45,9 @@ export class Game {
     const { sun } = buildWorld(this.scene, q);
     this.sun = sun;
 
-    this.car = new Car(this.scene);
-    this.smoke = new SmokePuffs(this.scene, q === 'low' ? 70 : 150);
-    this.skids = new SkidMarks(this.scene, q === 'low' ? 300 : 700);
+    this.car = new Car(this.scene, this.settings.carColor);
+    this.smoke = new SmokePuffs(this.scene, q === 'low' ? 110 : 220);
+    this.skids = new SkidMarks(this.scene, q === 'low' ? 400 : 900);
 
     this.smoke.enabled = this.settings.smoke;
     this.skids.enabled = this.settings.skids;
@@ -78,6 +78,11 @@ export class Game {
     this.smoke.enabled = settings.smoke;
     this.skids.enabled = settings.skids;
     this.audio.setEnabled(settings.sound);
+    if (settings.carColor) this.car.setBodyColor(settings.carColor);
+  }
+
+  setCarColor(hex) {
+    if (this.car) this.car.setBodyColor(hex);
   }
 
   start() {
@@ -199,22 +204,27 @@ export class Game {
 
   _updateEffects(dt) {
     const car = this.car;
-    const drifting = car.driftAmount > 0.18 && car.speed > 4;
+    // Lower threshold + emit more so slides always smoke.
+    const drifting = car.driftAmount > 0.12 && car.speed > 3.5;
 
     if (drifting) {
       const rears = car.getRearWheelWorldPositions();
-      // Smoke emission rate scales with drift.
-      const rate = 0.02 - car.driftAmount * 0.014;
+      // Faster smoke emission that scales with drift intensity.
+      const rate = 0.016 - car.driftAmount * 0.012;
       this._smokeTimer = (this._smokeTimer || 0) - dt;
       if (this._smokeTimer <= 0) {
-        for (const p of rears) this.smoke.emit(p, car.driftAmount);
-        this._smokeTimer = Math.max(0.006, rate);
+        // Emit an extra puff per wheel when drifting hard.
+        const puffs = car.driftAmount > 0.55 ? 2 : 1;
+        for (const p of rears) {
+          for (let k = 0; k < puffs; k++) this.smoke.emit(p, car.driftAmount);
+        }
+        this._smokeTimer = Math.max(0.004, rate);
       }
-      // Skid marks laid at a fixed distance interval.
+      // Stronger skid marks laid at a fixed interval.
       this._skidTimer -= dt;
       if (this._skidTimer <= 0) {
-        for (const p of rears) this.skids.add(p, car.yaw);
-        this._skidTimer = 0.02;
+        for (const p of rears) this.skids.add(p, car.yaw, car.driftAmount);
+        this._skidTimer = 0.018;
       }
     }
   }
@@ -229,7 +239,7 @@ export class Game {
     const car = this.car;
     this.hud.speed.textContent = car.speedKmh;
 
-    const drifting = car.driftAmount > 0.2 && car.speed > 4;
+    const drifting = car.driftAmount > 0.14 && car.speed > 3.5;
     if (drifting) {
       // Score scales with drift angle and speed.
       const gain = car.driftAmount * car.speed * dt * 10;
@@ -245,6 +255,18 @@ export class Game {
       this.hud.driftLabel.textContent = car.speedKmh > 5 ? 'DRIVING' : 'READY';
       this.hud.driftCurrent.textContent = '';
     }
-    this.hud.driftTotal.textContent = Math.round(this.driftTotal).toLocaleString();
+
+    const shown = Math.round(this.driftTotal);
+    if (shown !== this._lastShownScore) {
+      this.hud.driftTotal.textContent = shown.toLocaleString();
+      // Bounce the score when it increases.
+      if (drifting) {
+        const el = this.hud.driftTotal;
+        el.classList.remove('bump');
+        void el.offsetWidth; // restart animation
+        el.classList.add('bump');
+      }
+      this._lastShownScore = shown;
+    }
   }
 }
