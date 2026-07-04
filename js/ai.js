@@ -1,19 +1,25 @@
-// ai.js — a skilled AI driver for AI Race mode. It drives a normal Car (same
-// arcade physics as the player) by producing throttle/brake/steer/handbrake
-// each frame from the road path: it looks ahead, picks a racing line, slows
-// for sharp corners, drifts through them with the handbrake, and accelerates
-// on exit. All behavior is driven by the easy-to-edit AI_TUNING below.
+// ai.js — a skilled, reliable AI driver for AI Race mode. It drives a Car by
+// following the road's sample points as waypoints: it aims at the next
+// waypoint, tracks the racing line (Stanley control), brakes for corners,
+// handbrake-drifts the bigger ones (tire smoke + skids), accelerates on the
+// straights, and respawns onto the road if it ever gets badly stuck.
+//
+// All behavior is driven by the easy-to-edit AI_TUNING block below.
 
-// ---- Easy-to-edit AI tuning (challenging but beatable) ----
 export const AI_TUNING = {
-  topSpeed: 32,          // m/s the AI chases on straights
-  cornerSpeed: 21,       // m/s target through the sharpest corners
-  driftStrength: 0.42,   // 0..1 how eagerly it handbrake-drifts sharp corners
-  steerSmoothness: 12,   // higher = quicker steering corrections
-  steerGain: 0.95,       // overall steering authority (Stanley output scale)
+  aiSpeed: 32,           // top speed on straights (m/s)
+  cornerSpeed: 20,       // target speed through the sharpest corners (m/s)
+  turnSpeed: 1.05,       // steering authority toward the racing line
+  driftAngle: 0.55,      // 0..1 how eagerly/strongly it drifts corners
+  grip: 4.6,             // AI car lateral grip (higher = holds the line)
+  waypointReach: 6,      // how far ahead (samples) it aims the racing line
+  recoveryStrength: 1.5, // steering gain when correcting back onto the road
+
+  // Secondary knobs (rarely need changing):
+  cornerSharpness: 0.55, // curvature (rad) above which it starts a drift
+  driftCooldown: 2.0,    // min seconds between drift initiations
+  steerSmoothness: 14,   // higher = quicker steering corrections
   crossGain: 0.9,        // how hard it corrects back to the centerline
-  brakingSharpness: 0.6, // curvature above which it drifts the corner (rad)
-  driftCooldown: 2.4,    // min seconds between drift initiations
   skill: 0.9,            // 0..1 overall competence (lower = more mistakes)
 };
 
@@ -29,28 +35,30 @@ export class AIController {
     this._steer = 0;
     this._hbTimer = 0;
     this._cooldown = 0;
+    this._stuck = 0;
     this.distToRoad = 0;
     this.input = { gas: 0, brake: 0, steer: 0, handbrake: false };
     this.enabled = true;   // false during countdown
 
-    // The AI car uses grippier physics than the player so it can hold the
-    // racing line at speed (the player's ultra-slippery grip would make any
-    // simple AI understeer off every corner). It still drifts + smokes on the
-    // sharp corners via the handbrake — believable and fun, just not on rails.
-    car.maxSpeed = this.t.topSpeed;
-    car.baseGrip = 4.6;         // grippy → holds the line fast and clean
-    car.handbrakeGrip = 0.55;   // still slides when handbraking sharp corners
-    car.maxLatAccel = 48;       // realigns hard → stays on the road at speed
-    car.rollingDrag = 0.4;      // keeps pace on straights
-    car.maxYawRate = 1.9;       // turns in crisply at speed
+    // The AI car uses grippier physics than the player so a simple controller
+    // can hold the racing line at speed (the player's ultra-slippery grip would
+    // make any line-follower understeer off). It still drifts + smokes on the
+    // bigger corners via the handbrake — believable and fun, just not on rails.
+    car.maxSpeed = this.t.aiSpeed;
+    car.baseGrip = this.t.grip;
+    car.handbrakeGrip = 0.55;
+    car.maxLatAccel = 48;
+    car.rollingDrag = 0.4;
+    car.maxYawRate = 1.9;
     car.velDamp = 0.04;
   }
 
+  // Advance the target waypoint to the nearest sample ahead of the car.
   _advance() {
     const { samples, N } = this;
     const cx = this.car.pos.x, cz = this.car.pos.z;
     let best = this.idx, bestD = Infinity;
-    for (let k = 0; k <= 28; k++) {
+    for (let k = 0; k <= 30; k++) {
       const i = (this.idx + k) % N;
       const p = samples[i];
       const dx = p.x - cx, dz = p.z - cz;
@@ -71,6 +79,15 @@ export class AIController {
     return Math.abs(angDiff(h2, h1));
   }
 
+  _respawn() {
+    const p = this.samples[this.idx], n = this.samples[(this.idx + 3) % this.N];
+    this.car.pos.set(p.x, 0, p.z);
+    this.car.vel.set(0, 0, 0);
+    this.car.yaw = Math.atan2(n.x - p.x, n.z - p.z);
+    this.car.yawRate = 0;
+    this._steer = 0; this._hbTimer = 0;
+  }
+
   update(dt) {
     const car = this.car;
     if (!this.enabled) {
@@ -86,48 +103,54 @@ export class AIController {
     const speed = car.speed;
     const forward = car.vel.x * Math.sin(car.yaw) + car.vel.z * Math.cos(car.yaw);
 
-    // --- Stanley steering: track the centerline (heading error + cross-track) ---
+    // --- Respawn if badly stuck (far off-track and barely moving) ---
+    if (this.distToRoad > 30 && speed < 5) this._stuck += dt;
+    else this._stuck = Math.max(0, this._stuck - dt * 0.5);
+    if (this._stuck > 1.6) { this._respawn(); this._stuck = 0; car.update(dt, this.input); return; }
+
+    // --- Stanley steering toward the waypoint line (heading + cross-track) ---
     const rp = samples[this.idx];
-    const ahead = samples[(this.idx + 3) % N];
+    const ahead = samples[(this.idx + t.waypointReach) % N];
     const roadHeading = Math.atan2(ahead.x - rp.x, ahead.z - rp.z);
     const headingErr = angDiff(roadHeading, car.yaw);
-    // signed lateral offset from the centerline (right of road heading is +)
     const dx = car.pos.x - rp.x, dz = car.pos.z - rp.z;
     const cross = dx * Math.cos(roadHeading) - dz * Math.sin(roadHeading);
     let stanley = headingErr + Math.atan2(-t.crossGain * cross, speed + 4);
-    stanley += (Math.random() - 0.5) * (1 - t.skill) * 0.12; // tiny human imperfection
-    // Car convention: positive steer DECREASES yaw, so command is the negative
-    // of the desired yaw change.
-    let rawSteer = Math.max(-0.9, Math.min(0.9, -stanley * t.steerGain));
-    if (Math.abs(car.yawRate) > 1.5) rawSteer *= 0.5; // anti-spin
+    stanley += (Math.random() - 0.5) * (1 - t.skill) * 0.1; // tiny human imperfection
+    // Car convention: positive steer DECREASES yaw → command is the negative.
+    let rawSteer = Math.max(-0.95, Math.min(0.95, -stanley * t.turnSpeed));
+    if (Math.abs(car.yawRate) > 1.6) rawSteer *= 0.5; // anti-spin
     this._steer += (rawSteer - this._steer) * Math.min(1, t.steerSmoothness * dt);
 
-    // --- Corner detection → target speed (look a bit further for braking) ---
+    // --- Corner detection → target speed (looks ahead so it brakes early) ---
     const bend = Math.max(this._curvatureAhead(7), this._curvatureAhead(12) * 0.85);
     const sharp = Math.min(1, bend / 1.15);
-    let targetSpeed = t.topSpeed + (t.cornerSpeed - t.topSpeed) * sharp;
+    let targetSpeed = t.aiSpeed + (t.cornerSpeed - t.aiSpeed) * sharp;
     targetSpeed *= 0.85 + 0.15 * t.skill;
 
     let gas = forward < targetSpeed ? 1 : 0;
     let brake = forward > targetSpeed * 1.12 ? 1 : 0;
 
-    // --- Occasional handbrake drift on the sharpest corners (with cooldown) ---
+    // --- Drift the bigger corners (starts as the corner approaches) ---
     let handbrake = false;
-    if (bend > t.brakingSharpness && speed > 15 && this._cooldown <= 0 && Math.random() < t.driftStrength) {
-      this._hbTimer = 0.45;
+    if (bend > t.cornerSharpness && speed > 15 && this._cooldown <= 0 && Math.random() < t.driftAngle) {
+      this._hbTimer = 0.4 + t.driftAngle * 0.35; // stronger drifts hold the angle longer
       this._cooldown = t.driftCooldown;
     }
     if (this._hbTimer > 0) {
       this._hbTimer -= dt;
       handbrake = true;
-      gas = Math.abs(headingErr) < 0.5 ? 1 : 0;
+      gas = Math.abs(headingErr) < 0.55 ? 1 : 0; // feed power toward the exit (countersteer)
       brake = 0;
     }
 
     // --- Keep it on the wide road ---
-    if (this.distToRoad > 15) { gas *= 0.4; handbrake = false; }  // drifting wide → ease off
-    if (this.distToRoad > 26) { gas = speed < 8 ? 1 : 0; brake = 0; } // off track → crawl back
-    if (speed < 2.5) { gas = 1; handbrake = false; brake = 0; }   // unstick
+    if (this.distToRoad > 16) { gas *= 0.4; handbrake = false; }
+    if (this.distToRoad > 26) {                 // off track → steer hard back, crawl on
+      this._steer = Math.max(-1, Math.min(1, -stanley * t.recoveryStrength));
+      gas = speed < 9 ? 1 : 0; brake = 0; handbrake = false;
+    }
+    if (speed < 2.5) { gas = 1; handbrake = false; brake = 0; } // unstick
 
     this.input.gas = gas;
     this.input.brake = brake;

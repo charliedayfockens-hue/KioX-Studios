@@ -16,7 +16,9 @@ function loadSettings() {
   };
   try {
     const saved = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
-    return { ...def, ...saved };
+    const s = { ...def, ...saved };
+    s.map = 'forest'; // Desert removed — Forest is the only track
+    return s;
   } catch {
     return def;
   }
@@ -248,21 +250,17 @@ function normalizeHex(hex) {
   return /^#[0-9a-fA-F]{6}$/.test(h) ? h.toLowerCase() : '#ff3b3b';
 }
 
-// ---------- Map / Mode segmented selectors ----------
+// ---------- Mode segmented selector (Free Drift / AI Race) ----------
 export function wireSelectors(onChange) {
-  const wire = (containerId, attr, key) => {
-    const buttons = [...document.querySelectorAll(`#${containerId} .seg`)];
-    const mark = (val) => buttons.forEach((b) => b.classList.toggle('selected', b.dataset[attr] === val));
-    mark(settings[key]);
-    buttons.forEach((b) => b.addEventListener('click', () => {
-      settings[key] = b.dataset[attr];
-      saveSettings();
-      mark(settings[key]);
-      onChange && onChange(settings);
-    }));
-  };
-  wire('map-select', 'map', 'map');
-  wire('mode-select', 'mode', 'mode');
+  const buttons = [...document.querySelectorAll('#mode-select .seg')];
+  const mark = (val) => buttons.forEach((b) => b.classList.toggle('selected', b.dataset.mode === val));
+  mark(settings.mode);
+  buttons.forEach((b) => b.addEventListener('click', () => {
+    settings.mode = b.dataset.mode;
+    saveSettings();
+    mark(settings.mode);
+    onChange && onChange(settings);
+  }));
 }
 
 // ---------- Rotate hint ----------

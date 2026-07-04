@@ -47,13 +47,13 @@ export class Car {
     this.looseHold = 0.7;            // seconds the rear stays loose after handbrake
     this.maxLatAccel = 10;           // cap on sideways realignment (m/s^2) → gentle pull, sideways glide
 
-    // Faster steering response (higher ease) with only a modestly higher top
-    // turn rate → snappy turn-in and easy corrections, but not instant spin-out.
-    this.maxYawRate = 1.5;           // steering turn rate (rad/s)
-    this.handbrakeYawBoost = 1.4;    // extra authority when handbraking
-    this.yawEaseGrip = 7.5;          // faster angular accel into a turn (gripping)
-    this.yawEaseDrift = 3.6;         // faster response while drifting (easy to correct)
-    this.yawDamp = 1.4;              // slow spin decay → holds angle after releasing steer
+    // Much snappier steering: high turn rate + very fast angular response so the
+    // car flicks into drifts instantly, while damping keeps it controllable.
+    this.maxYawRate = 2.2;           // steering turn rate (rad/s) — big bump
+    this.handbrakeYawBoost = 1.35;   // extra authority when handbraking
+    this.yawEaseGrip = 12.0;         // very fast angular accel into a turn (gripping)
+    this.yawEaseDrift = 6.5;         // fast response while drifting (instant correction)
+    this.yawDamp = 1.5;              // spin decay → holds angle after releasing steer
 
     this._loose = 0;                 // loose-rear timer
     this._grip = this.baseGrip;      // smoothed current grip (slow recovery)
@@ -251,10 +251,11 @@ export class Car {
     // ---- Steering → angular velocity (this rotates the car) ----
     const speed = Math.hypot(this.vel.x, this.vel.z);
     const speedFactor = Math.min(1, speed / 5);
-    // Reverse-steer ONLY when genuinely reversing under grip. During a handbrake
-    // spin, vLong flips sign as the car rotates — keeping dir fixed lets the car
-    // carry a full 360 instead of steering fighting itself past 90°.
-    const dir = (!input.handbrake && vLong < -0.5) ? -1 : 1;
+    // Reverse-steer ONLY when deliberately reversing at low speed (backing up).
+    // During a high-speed backward DRIFT (facing backward while sliding) we keep
+    // dir = 1 so the player's steering stays consistent and the car can spin
+    // past 90°, hold a reverse-facing angle, and recover without a steering flip.
+    const dir = (input.brake && vLong < -0.5 && speed < 9) ? -1 : 1;
     let targetYaw = input.steer * this.maxYawRate * speedFactor * dir;
     if (input.handbrake) targetYaw *= this.handbrakeYawBoost;
 
@@ -266,9 +267,9 @@ export class Car {
     }
     this.yaw -= this.yawRate * dt;
 
-    // Visual steer angle — quicker front-wheel response.
-    const targetSteer = input.steer * 0.68;
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 18 * dt);
+    // Visual steer angle — very quick front-wheel response.
+    const targetSteer = input.steer * 0.7;
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 26 * dt);
 
     // ---- Integrate position (velocity is independent of facing) ----
     this.pos.x += this.vel.x * dt;
