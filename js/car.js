@@ -30,14 +30,15 @@ export class Car {
     this.wheelSpin = 0;
     this.steerAngle = 0;
 
-    // ---- Tuning: slower, very slippery, long-gliding arcade feel ----
-    this.enginePower = 26;           // slightly lower acceleration
-    this.reversePower = 13;
-    this.brakePower = 42;
-    this.maxSpeed = 30;              // m/s — lower top speed (easier control)
-    this.maxReverse = 10;
+    // ---- Tuning: quicker, very slippery, long-gliding arcade feel ----
+    this.enginePower = 31;           // stronger acceleration
+    this.reversePower = 14;
+    this.brakePower = 44;
+    this.maxSpeed = 36;              // m/s — higher top speed
+    this.maxReverse = 11;
     this.rollingDrag = 0.18;         // LOW forward drag → glides ~3s off throttle
     this.velDamp = 0.035;            // tiny overall damping → momentum lasts
+    this.extraDrag = 0;              // added by the game when off-road (slows the car)
 
     // Very low grip = slippery, big angles, long slides, and little pull toward
     // the steering direction (grip is the only thing that realigns velocity).
@@ -45,15 +46,20 @@ export class Car {
     this.handbrakeGrip = 0.2;        // rear grip while handbraking (very loose)
     this.gripRecover = 2.0;          // how fast grip climbs back after a slide (slow)
     this.looseHold = 0.7;            // seconds the rear stays loose after handbrake
-    this.maxLatAccel = 10;           // cap on sideways realignment (m/s^2) → gentle pull, sideways glide
+    this.maxLatAccel = 7;            // cap on sideways realignment → momentum carries forward
 
-    // Much snappier steering: high turn rate + very fast angular response so the
-    // car flicks into drifts instantly, while damping keeps it controllable.
-    this.maxYawRate = 2.2;           // steering turn rate (rad/s) — big bump
-    this.handbrakeYawBoost = 1.35;   // extra authority when handbraking
+    // Snappy steering when gripping, but the effect is dialed WAY down while
+    // already drifting so momentum carries mostly forward and holding steer only
+    // slowly tightens the line (instead of snapping toward the inside).
+    this.maxYawRate = 2.3;           // steering turn rate (rad/s)
+    this.handbrakeYawBoost = 1.3;    // extra authority when handbraking
     this.yawEaseGrip = 12.0;         // very fast angular accel into a turn (gripping)
     this.yawEaseDrift = 6.5;         // fast response while drifting (instant correction)
     this.yawDamp = 1.5;              // spin decay → holds angle after releasing steer
+    // Drift-aware steering softening:
+    this.driftSteerAngle = 0.45;     // slip angle (rad) that counts as "fully drifting"
+    this.driftSteerReduction = 0.6;  // cut steering authority up to 60% while drifting
+    this.driftSteerExpo = 0.6;       // need more steering angle to bite while drifting
 
     this._loose = 0;                 // loose-rear timer
     this._grip = this.baseGrip;      // smoothed current grip (slow recovery)
@@ -203,9 +209,9 @@ export class Car {
     if (vLong > this.maxSpeed) { const e = vLong - this.maxSpeed; this.vel.x -= fx * e; this.vel.z -= fz * e; }
     if (vLong < -this.maxReverse) { const e = vLong + this.maxReverse; this.vel.x -= fx * e; this.vel.z -= fz * e; }
 
-    // ---- Forward rolling drag (applied along forward only) ----
+    // ---- Forward rolling drag (applied along forward only; extraDrag off-road) ----
     vLong = this.vel.x * fx + this.vel.z * fz;
-    const longDrag = vLong * this.rollingDrag * dt;
+    const longDrag = vLong * (this.rollingDrag + this.extraDrag) * dt;
     this.vel.x -= fx * longDrag;
     this.vel.z -= fz * longDrag;
 
@@ -256,7 +262,19 @@ export class Car {
     // dir = 1 so the player's steering stays consistent and the car can spin
     // past 90°, hold a reverse-facing angle, and recover without a steering flip.
     const dir = (input.brake && vLong < -0.5 && speed < 9) ? -1 : 1;
-    let targetYaw = input.steer * this.maxYawRate * speedFactor * dir;
+
+    // Drift-aware steering: the bigger the current slip angle, the LESS the
+    // steering rotates the car, and the more steering angle it takes to bite.
+    // → momentum carries mostly forward, holding steer only slowly tightens the
+    // line, and countersteer stays available (its input reduces the slip).
+    const slipAng = Math.atan2(vLat, Math.abs(vLong) + 0.001);
+    const driftF = Math.min(1, Math.abs(slipAng) / this.driftSteerAngle);
+    const authority = 1 - driftF * this.driftSteerReduction;
+    const st = input.steer;
+    const expoMix = driftF * this.driftSteerExpo;           // 0 → linear, up to expo
+    const shapedSteer = st * ((1 - expoMix) + expoMix * st * st);
+
+    let targetYaw = shapedSteer * this.maxYawRate * speedFactor * dir * authority;
     if (input.handbrake) targetYaw *= this.handbrakeYawBoost;
 
     const ease = input.handbrake ? this.yawEaseDrift : this.yawEaseGrip;

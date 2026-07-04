@@ -2,7 +2,7 @@
 // player car, an AI opponent (AI Race mode), effects, race rules and HUD.
 
 import * as THREE from 'three';
-import { buildWorld } from './world.js';
+import { buildWorld, ROAD_WIDTH } from './world.js';
 import { Car } from './car.js';
 import { SmokePuffs, SkidMarks } from './effects.js';
 import { EngineAudio } from './audio.js';
@@ -31,6 +31,47 @@ class Progress {
     this.value = this.laps * this.N + best;
   }
   reset() { this.laps = 0; this.prev = 0; this.idx = 0; this.value = 0; this.dist = 0; this.armed = false; }
+}
+
+// Player-only ordered checkpoints. Floating glowing rings placed evenly around
+// the loop; only the next one is shown (and pulses). Passing through it advances
+// to the next. In AI Race a lap only validates once all have been collected.
+class Checkpoints {
+  constructor(scene, samples, count) {
+    this.samples = samples; this.N = samples.length; this.count = count;
+    const geo = new THREE.TorusGeometry(3.6, 0.42, 8, 22);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x00e5ff, emissive: 0x00cfff, emissiveIntensity: 0.9,
+      transparent: true, opacity: 0.85,
+    });
+    this.rings = [];
+    for (let k = 0; k < count; k++) {
+      const idx = Math.round((k / count) * this.N) % this.N;
+      const p = samples[idx], n = samples[(idx + 3) % this.N];
+      const ang = Math.atan2(n.x - p.x, n.z - p.z);
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(p.x, 4, p.z);
+      mesh.rotation.y = ang;         // hole faces along the road → drive through
+      mesh.visible = false;
+      scene.add(mesh);
+      this.rings.push({ mesh, pos: p });
+    }
+    this.reset();
+  }
+  _show() { this.rings.forEach((r, k) => { r.mesh.visible = (k === this.next); }); }
+  update(pos) {
+    const r = this.rings[this.next];
+    r.mesh.scale.setScalar(1 + Math.sin(performance.now() * 0.005) * 0.09);
+    const dx = pos.x - r.pos.x, dz = pos.z - r.pos.z;
+    if (dx * dx + dz * dz < (ROAD_WIDTH / 2 + 2) * (ROAD_WIDTH / 2 + 2)) {
+      this.hits++; this.next = (this.next + 1) % this.count; this._show();
+      return true;
+    }
+    return false;
+  }
+  lapComplete() { return this.hits >= this.count; }
+  lapDone() { this.hits = 0; }                 // keep collecting for the next lap
+  reset() { this.next = 0; this.hits = 0; this._show(); }
 }
 
 export class Game {
@@ -83,6 +124,9 @@ export class Game {
     this.roadSamples = world.roadSamples;
 
     this.car = new Car(this.scene, this.settings.carColor);
+    // Base performance figures for the off-road slowdown to scale from.
+    this._carBase = { engine: this.car.enginePower, maxSpeed: this.car.maxSpeed, grip: this.car.baseGrip };
+    this._off = 0;
     this.smoke = new SmokePuffs(this.scene, q === 'low' ? 110 : 240);
     this.skids = new SkidMarks(this.scene, q === 'low' ? 400 : 1000);
     this.smoke.enabled = this.settings.smoke;
@@ -95,6 +139,13 @@ export class Game {
     } else {
       this.car.setStart(world.start);
     }
+
+    // Player progress (for off-road detection) + ordered checkpoints, both modes.
+    this.playerProg = this.playerProg || new Progress(world.roadSamples);
+    this.playerProg.reset();
+    this.checkpoints = new Checkpoints(this.scene, world.roadSamples, 8);
+    this.playerValidLaps = 0;
+    this._prevPlayerLaps = 0;
 
     // Camera behind the player car.
     const cs = Math.sin(this.car.yaw), cc = Math.cos(this.car.yaw);
@@ -138,6 +189,7 @@ export class Game {
       raceHud: document.getElementById('race-hud'),
       lap: document.getElementById('race-lap'),
       pos: document.getElementById('race-pos'),
+      checkpoint: document.getElementById('checkpoint-value'),
       countdown: document.getElementById('countdown'),
       finish: document.getElementById('race-finish'),
       finishTitle: document.getElementById('finish-title'),
@@ -208,6 +260,7 @@ export class Game {
     this.ai.idx = 0; this.ai.enabled = false;
     this.playerProg.reset(); this.aiProg.reset();
     this.playerProg.update(this.car.pos); this.aiProg.update(this.aiCar.pos);
+    this.checkpoints.reset(); this.playerValidLaps = 0; this._prevPlayerLaps = 0; this._off = 0;
     this.skids.clear(); this.smoke.clear();
     this.race.state = 'countdown'; this.race.timer = 3.2; this.race.winner = null;
     this._setFinish(false);
@@ -243,9 +296,25 @@ export class Game {
     const countdown = this.race && this.race.state === 'countdown';
     const finished = this.race && this.race.state === 'finished';
 
+    // ---- Off-road slowdown (PLAYER only) ----
+    // Track how far the player is from the road centreline and ease an
+    // "off-road" factor in/out, scaling the player car's performance. The AI
+    // car is a separate instance and is never touched here.
+    this.playerProg.update(this.car.pos);
+    const target = this.playerProg.dist > ROAD_WIDTH / 2 ? 1 : 0;
+    this._off += (target - this._off) * Math.min(1, 3.5 * dt);
+    const o = this._off;
+    this.car.enginePower = this._carBase.engine * (1 - 0.5 * o);
+    this.car.maxSpeed = this._carBase.maxSpeed * (1 - 0.4 * o);
+    this.car.baseGrip = this._carBase.grip * (1 - 0.2 * o);
+    this.car.extraDrag = 0.9 * o;
+
     // Player input (frozen during countdown / after finish).
     resolveInput(dt);
     this.car.update(dt, (countdown || finished) ? ZERO_INPUT : input);
+
+    // Checkpoints (player only) — advance through the floating rings in order.
+    this.checkpoints.update(this.car.pos);
 
     // AI (its controller idles until enabled at GO).
     if (this.ai) this.ai.update(dt);
@@ -268,8 +337,14 @@ export class Game {
 
   _updateRace(dt) {
     const r = this.race;
-    this.playerProg.update(this.car.pos);
+    // playerProg is updated in _update(); AI tracked here.
     this.aiProg.update(this.aiCar.pos);
+
+    // Validate a player lap only if all checkpoints were collected that lap.
+    if (this.playerProg.laps > this._prevPlayerLaps) {
+      if (this.checkpoints.lapComplete()) { this.playerValidLaps++; this.checkpoints.lapDone(); }
+      this._prevPlayerLaps = this.playerProg.laps;
+    }
 
     if (r.state === 'countdown') {
       r.timer -= dt;
@@ -290,7 +365,7 @@ export class Game {
         if (this.hud.countdown) this.hud.countdown.classList.add('hidden');
       }
     } else if (r.state === 'racing') {
-      const pDone = this.playerProg.laps >= r.totalLaps;
+      const pDone = this.playerValidLaps >= r.totalLaps; // player must clear checkpoints
       const aDone = this.aiProg.laps >= r.totalLaps;
       if (pDone || aDone) {
         r.state = 'finished';
@@ -356,8 +431,12 @@ export class Game {
     const car = this.car;
     this.hud.speed.textContent = car.speedKmh;
 
+    if (this.hud.checkpoint) {
+      this.hud.checkpoint.textContent = `${Math.min(this.checkpoints.hits, this.checkpoints.count)}/${this.checkpoints.count}`;
+    }
+
     if (this.mode === 'race' && this.race) {
-      const lap = Math.min(this.race.totalLaps, this.playerProg.laps + 1);
+      const lap = Math.min(this.race.totalLaps, this.playerValidLaps + 1);
       if (this.hud.lap) this.hud.lap.textContent = `LAP ${lap}/${this.race.totalLaps}`;
       const first = this.playerProg.value >= this.aiProg.value;
       if (this.hud.pos) {

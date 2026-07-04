@@ -1,21 +1,40 @@
-// world.js — the "Forest" drift track: a clean, wide, beginner-friendly circuit
-// through a grassy forest — long start straight, wide sweepers, a smooth S,
-// and a big open hairpin. All primitives (no model/texture files), light for
-// mobile. The road samples double as the AI's waypoint path.
+// world.js — the "Pine Ridge Circuit" drift track, built to match the supplied
+// layout blueprint: long front straight, long right exit, medium right, the
+// long sweepers right→left across the top, an S-curve on the left, a tight
+// hairpin bottom-left and a medium left back onto the straight. Forest theme
+// with dense pines, rocks, guardrails, tire barriers, curbs and drift signs.
+// All primitives (no model/texture files), light for mobile. The road samples
+// double as the AI's waypoint path.
 
 import * as THREE from 'three';
 
-export const ARENA_HALF = 145; // half-size of the play area (meters)
-export const ROAD_WIDTH = 38;  // very wide road → room to slide, 360 & reverse-drift
+export const ARENA_HALF = 150; // half-size of the play area (meters)
+export const ROAD_WIDTH = 38;  // wide, consistent road → room to slide, 360 & reverse-drift
+export const TRACK_NAME = 'Pine Ridge Circuit';
 
-// Clean circuit control points (counter-clockwise), z up:
-//   long bottom straight → wide sweeper up the right → right straight →
-//   wide left sweeper → smooth S across the top → sweeper down the left →
-//   left straight → big open hairpin → back onto the start straight.
-const FOREST_POINTS = [
-  [-55, -104], [45, -104], [96, -72], [104, -8], [88, 54],
-  [40, 80], [-8, 54], [-52, 82], [-100, 52], [-110, -18],
-  [-96, -76], [-50, -94],
+// Pine Ridge Circuit centreline (traced from the layout blueprint), z up:
+//   front straight (bottom) → long right exit → medium-right chicane up the
+//   right → long sweeper right (top-right) → dip → long sweeper left (top-left)
+//   → down the left → S-curve → tight hairpin (bottom-left) → medium left →
+//   back onto the front straight.
+const PINE_RIDGE_POINTS = [
+  [-33, -83],  // 1 start / finish (front straight)
+  [58, -86],   //   front straight
+  [105, -68],  // 8 long right exit
+  [121, -26],  //   right side
+  [100, 14],   // 2 medium right
+  [116, 56],   //   corner out
+  [72, 83],    // 3 long sweeper right (top-right)
+  [19, 88],    //   top
+  [-28, 62],   //   dip between sweepers
+  [-74, 83],   // 4 long sweeper left (top-left)
+  [-106, 52],  //   down the left
+  [-95, 19],   // 5 S-curve (out)
+  [-70, 2],    //   S-curve (in)
+  [-91, -28],  //   S-curve (out) → hairpin approach
+  [-120, -55], // 6 hairpin left (apex)
+  [-83, -72],  //   hairpin exit
+  [-31, -43],  // 7 medium left → onto the front straight
 ];
 
 const THEME = {
@@ -91,14 +110,17 @@ export function buildWorld(scene, quality = 'medium') {
 
   // ---- Road (its samples are the AI waypoint path) ----
   const roadCurve = new THREE.CatmullRomCurve3(
-    FOREST_POINTS.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'catmullrom', 0.5
+    PINE_RIDGE_POINTS.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'catmullrom', 0.5
   );
   const roadSamples = roadCurve.getPoints(360);
   buildRoad(group, roadSamples, quality, t);
 
   addWoodenRails(group);
+  addCurbs(group, roadSamples);
   addTrees(group, roadSamples, quality);
+  addRocks(group, roadSamples, quality);
   addConesAndSigns(group, roadSamples);
+  addTireBarriers(group, roadSamples);
   addStaticSkids(group, roadSamples);
   addHills(group, t.hill);
   addStartLine(group, roadSamples);
@@ -255,43 +277,117 @@ function addWoodenRails(group) {
   place(true); place(false);
 }
 
+// Dense low-poly pines: a trunk with 3 stacked cone tiers.
 function addTrees(group, roadSamples, quality) {
-  const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 3, 6);
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 });
-  const foliageGeos = [
-    new THREE.ConeGeometry(2.4, 4.5, 7),
-    new THREE.ConeGeometry(2.0, 3.6, 7),
-    new THREE.SphereGeometry(2.2, 7, 6),
+  const trunkGeo = new THREE.CylinderGeometry(0.3, 0.45, 3.2, 6);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c3d22, roughness: 0.9 });
+  const tierGeos = [
+    new THREE.ConeGeometry(2.6, 3.2, 8),
+    new THREE.ConeGeometry(2.1, 2.9, 8),
+    new THREE.ConeGeometry(1.5, 2.6, 8),
   ];
-  const foliageMats = [
+  const pineMats = [
+    new THREE.MeshStandardMaterial({ color: 0x246b32, roughness: 0.95, flatShading: true }),
     new THREE.MeshStandardMaterial({ color: 0x2f8f3a, roughness: 0.95, flatShading: true }),
-    new THREE.MeshStandardMaterial({ color: 0x3aa84a, roughness: 0.95, flatShading: true }),
-    new THREE.MeshStandardMaterial({ color: 0x277d33, roughness: 0.95, flatShading: true }),
+    new THREE.MeshStandardMaterial({ color: 0x1f5e2b, roughness: 0.95, flatShading: true }),
   ];
-  const clear = ROAD_WIDTH / 2 + 8;
+  const clear = ROAD_WIDTH / 2 + 7;
   const near = makeRoadProximity(roadSamples, clear);
-  const target = quality === 'low' ? 54 : 96;
+  const target = quality === 'low' ? 90 : 165; // denser forest
   let placed = 0, attempts = 0;
-  while (placed < target && attempts < target * 12) {
+  while (placed < target && attempts < target * 14) {
     attempts++;
-    const inner = Math.random() < 0.26;
-    const r = inner ? Math.random() * 30 : 84 + Math.random() * 96;
+    const inner = Math.random() < 0.24;
+    const r = inner ? Math.random() * 34 : 88 + Math.random() * 100;
     const a = Math.random() * Math.PI * 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (Math.abs(x) < ARENA_HALF - 3 && Math.abs(z) < ARENA_HALF - 3 && near(x, z)) continue;
     const tree = new THREE.Group();
     const trunk = new THREE.Mesh(trunkGeo, trunkMat);
-    trunk.position.y = 1.5; trunk.castShadow = quality !== 'low'; tree.add(trunk);
-    const idx = Math.random() * foliageGeos.length | 0;
-    const f = new THREE.Mesh(foliageGeos[idx], foliageMats[idx]);
-    f.position.y = 4.4; f.castShadow = quality !== 'low'; tree.add(f);
-    const f2 = new THREE.Mesh(foliageGeos[(idx + 1) % 3], foliageMats[(idx + 1) % 3]);
-    f2.position.y = 6.1; f2.scale.setScalar(0.72); f2.castShadow = quality !== 'low'; tree.add(f2);
-    const f3 = new THREE.Mesh(foliageGeos[2], foliageMats[idx]);
-    f3.position.y = 7.4; f3.scale.setScalar(0.45); tree.add(f3);
-    tree.scale.setScalar(0.8 + Math.random() * 0.9);
+    trunk.position.y = 1.6; trunk.castShadow = quality !== 'low'; tree.add(trunk);
+    const mat = pineMats[(Math.random() * pineMats.length) | 0];
+    const t1 = new THREE.Mesh(tierGeos[0], mat); t1.position.y = 4.2; t1.castShadow = quality !== 'low'; tree.add(t1);
+    const t2 = new THREE.Mesh(tierGeos[1], mat); t2.position.y = 5.8; tree.add(t2);
+    const t3 = new THREE.Mesh(tierGeos[2], mat); t3.position.y = 7.2; tree.add(t3);
+    tree.scale.setScalar(0.8 + Math.random() * 1.0);
     tree.position.set(x, 0, z); tree.rotation.y = Math.random() * Math.PI;
     group.add(tree); placed++;
+  }
+}
+
+// Low-poly rocks scattered in the grass.
+function addRocks(group, roadSamples, quality) {
+  const geos = [new THREE.DodecahedronGeometry(1, 0), new THREE.IcosahedronGeometry(1.15, 0)];
+  const mats = [
+    new THREE.MeshStandardMaterial({ color: 0x8a8f96, roughness: 1, flatShading: true }),
+    new THREE.MeshStandardMaterial({ color: 0x6f747c, roughness: 1, flatShading: true }),
+  ];
+  const near = makeRoadProximity(roadSamples, ROAD_WIDTH / 2 + 4);
+  const target = quality === 'low' ? 24 : 44;
+  let placed = 0, attempts = 0;
+  while (placed < target && attempts < target * 14) {
+    attempts++;
+    const a = Math.random() * Math.PI * 2, r = 26 + Math.random() * 150;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    if (Math.abs(x) > ARENA_HALF - 3 || Math.abs(z) > ARENA_HALF - 3 || near(x, z)) continue;
+    const rock = new THREE.Mesh(geos[(Math.random() * geos.length) | 0], mats[(Math.random() * mats.length) | 0]);
+    const s = 0.8 + Math.random() * 2.2;
+    rock.scale.set(s, s * (0.6 + Math.random() * 0.4), s);
+    rock.position.set(x, s * 0.3, z); rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = quality !== 'low';
+    group.add(rock); placed++;
+  }
+}
+
+// Red/white curbs along both road edges through the corners.
+function addCurbs(group, samples) {
+  const N = samples.length;
+  const red = new THREE.MeshStandardMaterial({ color: 0xe23b3b, roughness: 0.7 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf3f3f3, roughness: 0.7 });
+  const geo = new THREE.PlaneGeometry(1.5, 2.2);
+  const curveAt = (i) => {
+    const a = samples[(i - 6 + N) % N], b = samples[i], c = samples[(i + 6) % N];
+    const h1 = Math.atan2(b.x - a.x, b.z - a.z), h2 = Math.atan2(c.x - b.x, c.z - b.z);
+    return Math.abs(Math.atan2(Math.sin(h2 - h1), Math.cos(h2 - h1)));
+  };
+  const halfIn = ROAD_WIDTH / 2 - 0.8;
+  let seg = 0;
+  for (let i = 0; i < N; i += 2) {
+    if (curveAt(i) < 0.06) continue; // only lay curbs on corners
+    const e = edgeAt(samples, i, 0);   // gives tangent angle + outward normal
+    const p = samples[i];
+    const mat = (seg++ % 2 === 0) ? red : white;
+    for (const side of [1, -1]) {      // both edges
+      const m = new THREE.Mesh(geo, mat);
+      m.rotation.set(-Math.PI / 2, 0, -e.ang);
+      m.position.set(p.x + e.nx * halfIn * side, 0.03, p.z + e.nz * halfIn * side);
+      group.add(m);
+    }
+  }
+}
+
+// Stacks of tyres on the outside of the fastest / tightest corners.
+function addTireBarriers(group, samples) {
+  const tyreGeo = new THREE.TorusGeometry(0.6, 0.28, 6, 10);
+  const tyreMat = new THREE.MeshStandardMaterial({ color: 0x141416, roughness: 0.95 });
+  const makeStack = (x, z) => {
+    const g = new THREE.Group();
+    for (let h = 0; h < 3; h++) {
+      const tyre = new THREE.Mesh(tyreGeo, tyreMat);
+      tyre.rotation.x = Math.PI / 2;
+      tyre.position.y = 0.4 + h * 0.55;
+      tyre.castShadow = true;
+      g.add(tyre);
+    }
+    g.position.set(x, 0, z);
+    group.add(g);
+  };
+  // Line a few tyres along the outside of the hairpin and a fast sweeper.
+  for (const [a, b] of [[300, 320], [130, 150]]) {
+    for (let i = a; i < b; i += 4) {
+      const e = edgeAt(samples, i, 2.4);
+      makeStack(e.x, e.z);
+    }
   }
 }
 
