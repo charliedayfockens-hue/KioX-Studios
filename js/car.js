@@ -34,19 +34,26 @@ export class Car {
     this.enginePower = 22;
     this.reversePower = 12;
     this.brakePower = 40;
-    this.maxSpeed = 30;              // m/s
+    this.maxSpeed = 26;              // m/s — slower top speed
     this.maxReverse = 10;
-    this.rollingDrag = 0.6;          // forward drag
-    this.velDamp = 0.12;             // gentle overall damping (keeps momentum long)
+    this.rollingDrag = 0.55;         // forward drag
+    this.velDamp = 0.05;             // very low → slides carry momentum a long time
 
-    this.baseGrip = 2.4;             // lateral tire grip (normal)
-    this.handbrakeGrip = 0.5;        // lateral grip while handbraking (slides)
+    // Low grip = very slippery, big angles, long slides. Recovery is slow.
+    this.baseGrip = 1.5;             // normal lateral grip (was 2.4)
+    this.handbrakeGrip = 0.32;       // rear grip while handbraking (very loose)
+    this.gripRecover = 2.2;          // how fast grip climbs back after a slide (slow)
+    this.looseHold = 0.7;            // seconds the rear stays loose after handbrake
 
-    this.maxYawRate = 1.7;           // steering turn rate (rad/s)
-    this.handbrakeYawBoost = 1.9;    // extra steering authority when handbraking
-    this.yawEaseGrip = 6.0;          // how fast yaw follows steering (gripping)
-    this.yawEaseDrift = 3.2;         // slower when drifting → less auto-correct
-    this.yawDamp = 2.2;              // decay of spin when steering is released
+    // Torque is lower and smoother so big angles are holdable, not twitchy.
+    this.maxYawRate = 1.3;           // steering turn rate (rad/s) — lower torque
+    this.handbrakeYawBoost = 1.4;    // extra authority when handbraking (gentler)
+    this.yawEaseGrip = 5.0;          // angular acceleration into a turn (gripping)
+    this.yawEaseDrift = 2.6;         // gentler angular accel while drifting
+    this.yawDamp = 1.4;              // slow spin decay → holds angle after releasing steer
+
+    this._loose = 0;                 // loose-rear timer
+    this._grip = this.baseGrip;      // smoothed current grip (slow recovery)
 
     this.driftAmount = 0;            // 0..1 smoothed drift/spin intensity
     this.driftAngle = 0;
@@ -166,6 +173,8 @@ export class Car {
     this.yaw = this.startYaw;
     this.yawRate = 0;
     this.driftAmount = 0;
+    this._loose = 0;
+    this._grip = this.baseGrip;
     this.body.rotation.set(0, 0, 0);
   }
 
@@ -198,11 +207,23 @@ export class Car {
     this.vel.z -= fz * longDrag;
 
     // ---- Lateral grip: remove part of the sideways velocity ----
-    // This is the ONLY thing the handbrake changes — lower grip = more slide.
-    // No sideways impulse is ever applied, so the car never gets "shoved".
+    // The handbrake ONLY lowers grip (no sideways impulse → never shoved).
+    // Grip is lost instantly but recovers SLOWLY, and the rear stays loose for
+    // a short moment after releasing the handbrake → long, floaty slides.
+    if (input.handbrake) this._loose = this.looseHold;
+    else this._loose = Math.max(0, this._loose - dt);
+
+    let targetGrip;
+    if (input.handbrake) targetGrip = this.handbrakeGrip;
+    else if (this._loose > 0)
+      targetGrip = THREE.MathUtils.lerp(this.handbrakeGrip, this.baseGrip, 1 - this._loose / this.looseHold);
+    else targetGrip = this.baseGrip;
+
+    if (targetGrip < this._grip) this._grip = targetGrip;               // lose grip instantly
+    else this._grip += (targetGrip - this._grip) * Math.min(1, this.gripRecover * dt); // regain slowly
+
     vLat = this.vel.x * rx + this.vel.z * rz;
-    const grip = input.handbrake ? this.handbrakeGrip : this.baseGrip;
-    const gripLoss = Math.min(1, grip * dt);
+    const gripLoss = Math.min(1, this._grip * dt);
     this.vel.x -= rx * (vLat * gripLoss);
     this.vel.z -= rz * (vLat * gripLoss);
 
@@ -229,9 +250,9 @@ export class Car {
     }
     this.yaw -= this.yawRate * dt;
 
-    // Visual steer angle (eased, never snaps).
-    const targetSteer = input.steer * 0.6;
-    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 8 * dt);
+    // Visual steer angle — snappier front-wheel response.
+    const targetSteer = input.steer * 0.65;
+    this.steerAngle += (targetSteer - this.steerAngle) * Math.min(1, 14 * dt);
 
     // ---- Integrate position (velocity is independent of facing) ----
     this.pos.x += this.vel.x * dt;
