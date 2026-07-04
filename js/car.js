@@ -30,20 +30,22 @@ export class Car {
     this.wheelSpin = 0;
     this.steerAngle = 0;
 
-    // ---- Tuning: slow, slippery, spin-friendly arcade feel ----
-    this.enginePower = 22;
-    this.reversePower = 12;
-    this.brakePower = 40;
-    this.maxSpeed = 26;              // m/s — slower top speed
-    this.maxReverse = 10;
-    this.rollingDrag = 0.55;         // forward drag
-    this.velDamp = 0.05;             // very low → slides carry momentum a long time
+    // ---- Tuning: fast, very slippery, long-gliding arcade feel ----
+    this.enginePower = 34;           // stronger acceleration
+    this.reversePower = 14;
+    this.brakePower = 42;
+    this.maxSpeed = 38;              // m/s — higher top speed
+    this.maxReverse = 11;
+    this.rollingDrag = 0.18;         // LOW forward drag → glides ~3s off throttle
+    this.velDamp = 0.035;            // tiny overall damping → momentum lasts
 
-    // Low grip = very slippery, big angles, long slides. Recovery is slow.
-    this.baseGrip = 1.5;             // normal lateral grip (was 2.4)
-    this.handbrakeGrip = 0.32;       // rear grip while handbraking (very loose)
-    this.gripRecover = 2.2;          // how fast grip climbs back after a slide (slow)
+    // Very low grip = slippery, big angles, long slides, and little pull toward
+    // the steering direction (grip is the only thing that realigns velocity).
+    this.baseGrip = 0.9;             // normal lateral grip (lower → less inside pull)
+    this.handbrakeGrip = 0.2;        // rear grip while handbraking (very loose)
+    this.gripRecover = 2.0;          // how fast grip climbs back after a slide (slow)
     this.looseHold = 0.7;            // seconds the rear stays loose after handbrake
+    this.maxLatAccel = 10;           // cap on sideways realignment (m/s^2) → gentle pull, sideways glide
 
     // Torque is lower and smoother so big angles are holdable, not twitchy.
     this.maxYawRate = 1.3;           // steering turn rate (rad/s) — lower torque
@@ -224,13 +226,26 @@ export class Car {
 
     vLat = this.vel.x * rx + this.vel.z * rz;
     const gripLoss = Math.min(1, this._grip * dt);
-    this.vel.x -= rx * (vLat * gripLoss);
-    this.vel.z -= rz * (vLat * gripLoss);
+    // Desired sideways removal this frame, but capped so the car is never
+    // yanked hard toward the steering/inside direction — the slide comes from
+    // momentum + low grip, not a big artificial side pull.
+    let latRemove = vLat * gripLoss;
+    const cap = this.maxLatAccel * dt;
+    if (latRemove > cap) latRemove = cap;
+    else if (latRemove < -cap) latRemove = -cap;
+    this.vel.x -= rx * latRemove;
+    this.vel.z -= rz * latRemove;
 
     // ---- Gentle overall damping (long momentum, stays controllable) ----
     const damp = Math.max(0, 1 - this.velDamp * dt);
     this.vel.x *= damp;
     this.vel.z *= damp;
+
+    // ---- Total-speed cap ----
+    // Clamp the WHOLE velocity (not just the forward part) so drifting while
+    // thrusting can't "pump" the car past top speed. Keeps top speed honest.
+    const tot = Math.hypot(this.vel.x, this.vel.z);
+    if (tot > this.maxSpeed) { const f = this.maxSpeed / tot; this.vel.x *= f; this.vel.z *= f; }
 
     // ---- Steering → angular velocity (this rotates the car) ----
     const speed = Math.hypot(this.vel.x, this.vel.z);
