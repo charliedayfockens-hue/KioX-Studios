@@ -166,21 +166,23 @@
         <span class="speed-unit">km/h</span>
       </div>
 
-      <!-- Left controls: handbrake ABOVE the two steer buttons -->
+      <!-- Left controls: steer left / right -->
       <div class="controls controls-left">
-        <button class="ctrl ctrl-handbrake" id="ctrl-handbrake" data-key="handbrake">
-          <span class="ctrl-emoji">✋</span><span class="ctrl-text">DRIFT</span>
-        </button>
         <div class="steer-row">
           <button class="ctrl ctrl-steer" id="ctrl-left" data-key="left">‹</button>
           <button class="ctrl ctrl-steer" id="ctrl-right" data-key="right">›</button>
         </div>
       </div>
 
-      <!-- Right controls: brake + gas -->
+      <!-- Right controls: handbrake above gas + brake (all near the right thumb) -->
       <div class="controls controls-right">
-        <button class="ctrl ctrl-brake" id="ctrl-brake" data-key="brake">⌄</button>
-        <button class="ctrl ctrl-gas" id="ctrl-gas" data-key="gas">⌃</button>
+        <button class="ctrl ctrl-handbrake" id="ctrl-handbrake" data-key="handbrake">
+          <span class="ctrl-emoji">✋</span><span class="ctrl-text">DRIFT</span>
+        </button>
+        <div class="gas-brake-row">
+          <button class="ctrl ctrl-brake" id="ctrl-brake" data-key="brake">⌄</button>
+          <button class="ctrl ctrl-gas" id="ctrl-gas" data-key="gas">⌃</button>
+        </div>
       </div>
     </div>
 

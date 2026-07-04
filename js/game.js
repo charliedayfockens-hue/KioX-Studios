@@ -55,6 +55,7 @@ export class Game {
 
     // Camera state (smoothed follow) — start it behind the car.
     const cs = Math.sin(this.car.yaw), cc = Math.cos(this.car.yaw);
+    this._camYaw = this.car.yaw;
     this._camPos = new THREE.Vector3(this.car.pos.x - cs * 12, 6, this.car.pos.z - cc * 12);
     this._camLook = new THREE.Vector3(this.car.pos.x + cs * 6, 1.4, this.car.pos.z + cc * 6);
     this._shake = 0;
@@ -94,6 +95,7 @@ export class Game {
     this.audio.setEnabled(this.settings.sound);
     this.audio.start();
     this.audio.resume();
+    if (typeof window !== 'undefined') window.__kiox = this; // debug/telemetry handle
     if (!this._raf) this._loop();
   }
 
@@ -168,29 +170,33 @@ export class Game {
 
   _updateCamera(dt) {
     const car = this.car;
-    // Desired camera sits behind & above the car, along its heading.
+
+    // Follow the direction of TRAVEL (velocity) when moving, so a 360 spin
+    // rotates the car in view instead of whipping the whole world around.
+    // Fall back to the car's facing when nearly stopped.
+    const targetHeading = car.speed > 2 ? Math.atan2(car.vel.x, car.vel.z) : car.yaw;
+    let dAng = targetHeading - this._camYaw;
+    dAng = Math.atan2(Math.sin(dAng), Math.cos(dAng)); // shortest angle
+    this._camYaw += dAng * Math.min(1, 3.2 * dt);      // slow → smooth in spins
+    const sin = Math.sin(this._camYaw);
+    const cos = Math.cos(this._camYaw);
+
     const back = 11 + car.speed * 0.12;
     const height = 5.2 + car.speed * 0.03;
-    const sin = Math.sin(car.yaw);
-    const cos = Math.cos(car.yaw);
-
     const desired = new THREE.Vector3(
       car.pos.x - sin * back,
       car.pos.y + height,
       car.pos.z - cos * back
     );
+    this._camPos.lerp(desired, 1 - Math.pow(0.0025, dt));
 
-    // Smooth follow (lag).
-    const lag = 1 - Math.pow(0.0018, dt); // frame-rate independent smoothing
-    this._camPos.lerp(desired, lag);
-
-    // Look slightly ahead of the car.
+    // Look slightly ahead along the travel heading.
     const lookAt = new THREE.Vector3(
-      car.pos.x + sin * 6,
+      car.pos.x + sin * 5,
       car.pos.y + 1.4,
-      car.pos.z + cos * 6
+      car.pos.z + cos * 5
     );
-    this._camLook.lerp(lookAt, 1 - Math.pow(0.002, dt));
+    this._camLook.lerp(lookAt, 1 - Math.pow(0.003, dt));
 
     // Camera shake scaled by drift + speed.
     let shakeX = 0, shakeY = 0;

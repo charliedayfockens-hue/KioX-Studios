@@ -5,9 +5,9 @@
 
 import * as THREE from 'three';
 
-export const ARENA_HALF = 115; // half-size of the play area (meters)
+export const ARENA_HALF = 140; // half-size of the play area (meters)
 export const TRACK_NAME = 'Forest';
-export const ROAD_WIDTH = 30;  // much wider road → plenty of room to slide
+export const ROAD_WIDTH = 36;  // very wide road → lots of room to slide & 360
 
 export function buildWorld(scene, quality = 'medium') {
   const group = new THREE.Group();
@@ -76,30 +76,31 @@ export function buildWorld(scene, quality = 'medium') {
   infield.receiveShadow = quality !== 'low';
   group.add(infield);
 
-  // ---- The curvy drift road: straights, sweepers, an S and a hairpin ----
+  // ---- The drift course: wide start straight, sweepers, an S and a hairpin ----
   const roadCurve = new THREE.CatmullRomCurve3(
     [
-      [-8, 92],   // top straight
-      [48, 86],
-      [90, 56],   // long right sweeper
-      [88, 14],
-      [56, -8],   // S entry (tucks in)
-      [90, -42],  // S exit
-      [74, -82],  // right-bottom
-      [22, -94],  // bottom straight
-      [-36, -88],
-      [-80, -74],
-      [-96, -36], // bottom-left sweeper
-      [-56, -12], // tighter inward turn (hairpin feel)
-      [-88, 16],
-      [-82, 62],  // left sweeper
-      [-40, 88],
+      [-12, 102],  // top straight (wide start area)
+      [52, 98],
+      [100, 70],   // long right sweeper
+      [106, 26],
+      [70, 4],     // S entry (tucks in)
+      [106, -32],  // S exit
+      [90, -78],   // bottom-right sweeper
+      [34, -104],  // bottom straight
+      [-28, -100],
+      [-80, -88],
+      [-114, -50], // bottom-left sweeper
+      [-92, -18],  // hairpin approach
+      [-116, 10],  // hairpin apex (sharp)
+      [-74, 30],   // hairpin exit (doubles back)
+      [-96, 64],   // left sweeper
+      [-50, 96],
     ].map(([x, z]) => new THREE.Vector3(x, 0, z)),
     true,
     'catmullrom',
     0.5
   );
-  const roadSamples = roadCurve.getPoints(320);
+  const roadSamples = roadCurve.getPoints(360);
   buildRoad(group, roadSamples, quality);
 
   // ---- Wooden guardrails around the play area ----
@@ -110,6 +111,9 @@ export function buildWorld(scene, quality = 'medium') {
 
   // ---- Cones + signs ----
   addConesAndSigns(group, roadSamples);
+
+  // ---- Baked skid streaks on a few corners ----
+  addStaticSkids(group, roadSamples);
 
   // ---- Background hills ----
   addHills(group);
@@ -275,7 +279,7 @@ function addTrees(group, roadSamples, quality) {
     new THREE.MeshStandardMaterial({ color: 0x277d33, roughness: 0.95, flatShading: true }),
   ];
 
-  const roadClear = ROAD_WIDTH / 2 + 7; // keep trees clear of the wider road
+  const roadClear = ROAD_WIDTH / 2 + 8; // keep trees clear of the wider road
   const tooCloseToRoad = (x, z) => {
     for (let i = 0; i < roadSamples.length; i += 3) {
       const p = roadSamples[i];
@@ -285,13 +289,13 @@ function addTrees(group, roadSamples, quality) {
     return false;
   };
 
-  const target = quality === 'low' ? 44 : 78;
+  const target = quality === 'low' ? 54 : 96;
   let placed = 0, attempts = 0;
   while (placed < target && attempts < target * 12) {
     attempts++;
     // Ring: mostly near/outside the edges + a small central island.
-    const inner = Math.random() < 0.28;
-    const r = inner ? Math.random() * 26 : 70 + Math.random() * 80;
+    const inner = Math.random() < 0.26;
+    const r = inner ? Math.random() * 30 : 82 + Math.random() * 92;
     const a = Math.random() * Math.PI * 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (Math.abs(x) < ARENA_HALF - 3 && Math.abs(z) < ARENA_HALF - 3 && tooCloseToRoad(x, z)) continue;
@@ -307,13 +311,18 @@ function addTrees(group, roadSamples, quality) {
     f.position.y = 4.4;
     f.castShadow = quality !== 'low';
     tree.add(f);
-    // a second smaller tuft for a fuller look
-    const f2 = new THREE.Mesh(foliageGeos[(idx + 1) % foliageGeos.length], foliageMats[idx]);
-    f2.position.y = 6.2;
-    f2.scale.setScalar(0.7);
+    // stacked tufts for a fuller, rounder cartoon tree
+    const f2 = new THREE.Mesh(foliageGeos[(idx + 1) % foliageGeos.length], foliageMats[(idx + 1) % foliageMats.length]);
+    f2.position.y = 6.1;
+    f2.scale.setScalar(0.72);
+    f2.castShadow = quality !== 'low';
     tree.add(f2);
+    const f3 = new THREE.Mesh(foliageGeos[2], foliageMats[idx]);
+    f3.position.y = 7.4;
+    f3.scale.setScalar(0.45);
+    tree.add(f3);
 
-    const s = 0.8 + Math.random() * 0.8;
+    const s = 0.8 + Math.random() * 0.9;
     tree.scale.setScalar(s);
     tree.position.set(x, 0, z);
     tree.rotation.y = Math.random() * Math.PI;
@@ -322,43 +331,90 @@ function addTrees(group, roadSamples, quality) {
   }
 }
 
+// Outward edge point + tangent angle at a road sample.
+function edgeAt(samples, i, extra) {
+  const len = samples.length;
+  const p = samples[i % len];
+  const n = samples[(i + 1) % len];
+  const tx = n.x - p.x, tz = n.z - p.z;
+  const l = Math.hypot(tx, tz) || 1;
+  let nx = tz / l, nz = -tx / l;            // road normal
+  if (nx * p.x + nz * p.z < 0) { nx = -nx; nz = -nz; } // point outward
+  const off = ROAD_WIDTH / 2 + extra;
+  return { x: p.x + nx * off, z: p.z + nz * off, ang: Math.atan2(tx, tz), nx, nz };
+}
+
 function addConesAndSigns(group, roadSamples) {
   const coneGeo = new THREE.ConeGeometry(0.45, 1.1, 10);
-  const coneMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.7 });
+  const coneMat = new THREE.MeshStandardMaterial({ color: 0xff7a1a, roughness: 0.7, flatShading: true });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
   const baseGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.12, 10);
 
-  // Line cones just inside the outer edge of a couple of corners.
-  const coneAt = [30, 60, 110, 150, 190];
-  coneAt.forEach((i) => {
-    const p = roadSamples[i % roadSamples.length];
+  // Delineator cones lining the outer road edge.
+  for (let i = 0; i < roadSamples.length; i += 26) {
+    const e = edgeAt(roadSamples, i, 1.6);
     const cone = new THREE.Mesh(coneGeo, coneMat);
-    cone.position.set(p.x * 1.18, 0.55, p.z * 1.18);
+    cone.position.set(e.x, 0.55, e.z);
     cone.castShadow = true;
+    const stripe = new THREE.Mesh(new THREE.ConeGeometry(0.36, 0.3, 10), stripeMat);
+    stripe.position.set(e.x, 0.62, e.z);
     const base = new THREE.Mesh(baseGeo, coneMat);
-    base.position.set(p.x * 1.18, 0.06, p.z * 1.18);
-    group.add(cone, base);
-  });
+    base.position.set(e.x, 0.06, e.z);
+    group.add(cone, stripe, base);
+  }
 
-  // A couple of cartoony signs.
+  // Cartoony chevron "drift arrow" signs facing the road on some corners.
   const postMat = new THREE.MeshStandardMaterial({ color: 0x8a8f99, roughness: 0.6, metalness: 0.3 });
-  const makeSign = (x, z, color, rot) => {
+  const boardMat = new THREE.MeshStandardMaterial({ color: 0x1c2330, roughness: 0.6 });
+  const arrowMat = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.5, emissive: 0x5a4700, emissiveIntensity: 0.3 });
+  const makeChevronSign = (i, flip) => {
+    const e = edgeAt(roadSamples, i, 4.5);
     const g = new THREE.Group();
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 3, 8), postMat);
-    post.position.y = 1.5;
-    g.add(post);
-    const board = new THREE.Mesh(
-      new THREE.BoxGeometry(2.4, 1.2, 0.15),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.6 })
-    );
-    board.position.y = 3;
-    g.add(board);
-    g.position.set(x, 0, z);
-    g.rotation.y = rot;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 3, 8), postMat);
+    post.position.y = 1.5; post.castShadow = true; g.add(post);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.3, 0.16), boardMat);
+    board.position.y = 3; board.castShadow = true; g.add(board);
+    // two chevrons pointing along the turn
+    for (let k = -1; k <= 1; k += 2) {
+      const a1 = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.28, 0.2), arrowMat);
+      a1.position.set(k * 0.35, 3.2, 0.1); a1.rotation.z = flip * 0.6 * -k; g.add(a1);
+      const a2 = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.28, 0.2), arrowMat);
+      a2.position.set(k * 0.35, 2.8, 0.1); a2.rotation.z = flip * 0.6 * -k; g.add(a2);
+    }
+    g.position.set(e.x, 0, e.z);
+    g.rotation.y = e.ang + Math.PI / 2;
     group.add(g);
   };
-  makeSign(-18, 66, 0xff4d6d, 0.4);
-  makeSign(66, -14, 0x2f9bff, -1.0);
-  makeSign(14, -70, 0x34c759, 2.6);
+  makeChevronSign(70, 1);
+  makeChevronSign(180, -1);
+  makeChevronSign(300, 1);
+}
+
+// Faint pre-existing skid streaks baked onto a couple of corners for flavor.
+function addStaticSkids(group, roadSamples) {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x0c0c0e, transparent: true, opacity: 0.4, depthWrite: false });
+  const geo = new THREE.PlaneGeometry(0.5, 1.4);
+  const mesh = new THREE.InstancedMesh(geo, mat, 120);
+  mesh.renderOrder = 1;
+  const d = new THREE.Object3D();
+  let n = 0;
+  const arcs = [[40, 90], [150, 200], [255, 300]];
+  for (const [a, b] of arcs) {
+    for (let i = a; i < b && n < 120; i += 2) {
+      const p = roadSamples[i % roadSamples.length];
+      const nx = roadSamples[(i + 1) % roadSamples.length];
+      const ang = Math.atan2(nx.x - p.x, nx.z - p.z);
+      const lateral = (Math.sin(i * 0.5) * ROAD_WIDTH * 0.28);
+      const perpx = Math.cos(ang), perpz = -Math.sin(ang);
+      d.position.set(p.x + perpx * lateral, 0.02, p.z + perpz * lateral);
+      d.rotation.set(-Math.PI / 2, 0, -ang);
+      d.scale.set(1, 1, 1);
+      d.updateMatrix();
+      mesh.setMatrixAt(n++, d.matrix);
+    }
+  }
+  mesh.count = n;
+  group.add(mesh);
 }
 
 function addHills(group) {
