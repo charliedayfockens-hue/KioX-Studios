@@ -1,20 +1,20 @@
 // effects.js — tire smoke particles and skid marks, both pooled so they never
-// allocate during gameplay.
+// allocate during gameplay. Tuned bigger/stronger for an exaggerated drift look.
 
 import * as THREE from 'three';
 
 // ---------- Tire Smoke ----------
 export class SmokePuffs {
-  constructor(scene, max = 140) {
+  constructor(scene, max = 220) {
     this.max = max;
     this.enabled = true;
     const tex = makeSmokeTexture();
     this.material = new THREE.SpriteMaterial({
       map: tex,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.7,
       depthWrite: false,
-      color: 0xdfe6ee,
+      color: 0xeef2f8,
     });
     this.pool = [];
     this.active = [];
@@ -25,7 +25,6 @@ export class SmokePuffs {
       scene.add(s);
       this.pool.push(s);
     }
-    this._t = 0;
   }
 
   emit(position, intensity) {
@@ -34,17 +33,18 @@ export class SmokePuffs {
     if (!s) return;
     s.visible = true;
     s.position.copy(position);
-    s.position.x += (Math.random() - 0.5) * 0.5;
-    s.position.z += (Math.random() - 0.5) * 0.5;
-    s.material.opacity = 0.35 + 0.35 * intensity;
+    s.position.x += (Math.random() - 0.5) * 0.7;
+    s.position.z += (Math.random() - 0.5) * 0.7;
+    s.position.y += 0.2;
     s.userData = {
       life: 0,
-      maxLife: 0.9 + Math.random() * 0.6,
-      grow: 2.2 + Math.random() * 2.0,
-      vy: 0.6 + Math.random() * 0.6,
-      vx: (Math.random() - 0.5) * 0.8,
-      vz: (Math.random() - 0.5) * 0.8,
-      start: 0.6 + Math.random() * 0.4,
+      maxLife: 1.1 + Math.random() * 0.8,
+      grow: 3.6 + Math.random() * 3.0,     // bigger puffs
+      vy: 0.8 + Math.random() * 0.9,
+      vx: (Math.random() - 0.5) * 1.2,
+      vz: (Math.random() - 0.5) * 1.2,
+      start: 0.9 + Math.random() * 0.6,
+      peak: 0.5 + 0.4 * intensity,          // stronger when drifting harder
     };
     s.scale.setScalar(s.userData.start);
     this.active.push(s);
@@ -66,7 +66,9 @@ export class SmokePuffs {
       s.position.x += u.vx * dt;
       s.position.z += u.vz * dt;
       s.scale.setScalar(u.start + u.grow * t);
-      s.material.opacity = (0.35 + 0.35) * (1 - t) * 0.9;
+      // Fade in fast, then out.
+      const fade = t < 0.15 ? t / 0.15 : (1 - t) / 0.85;
+      s.material.opacity = u.peak * fade;
     }
   }
 
@@ -82,35 +84,34 @@ function makeSmokeTexture() {
   c.width = c.height = size;
   const ctx = c.getContext('2d');
   const g = ctx.createRadialGradient(size / 2, size / 2, 2, size / 2, size / 2, size / 2);
-  g.addColorStop(0, 'rgba(255,255,255,0.9)');
-  g.addColorStop(0.4, 'rgba(230,235,245,0.5)');
-  g.addColorStop(1, 'rgba(230,235,245,0)');
+  g.addColorStop(0, 'rgba(255,255,255,0.95)');
+  g.addColorStop(0.45, 'rgba(235,240,248,0.55)');
+  g.addColorStop(1, 'rgba(235,240,248,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(c);
-  return tex;
+  return new THREE.CanvasTexture(c);
 }
 
 // ---------- Skid Marks ----------
-// A rolling buffer of small dark quads laid on the asphalt.
+// A rolling buffer of dark quads laid on the road. Wider + darker than before.
 export class SkidMarks {
-  constructor(scene, max = 600) {
+  constructor(scene, max = 900) {
     this.max = max;
     this.enabled = true;
-    this.geo = new THREE.PlaneGeometry(0.4, 0.7);
+    this.geo = new THREE.PlaneGeometry(0.55, 0.9);
     this.mat = new THREE.MeshBasicMaterial({
       color: 0x0a0a0c,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.78,          // stronger marks
       depthWrite: false,
     });
     this.mesh = new THREE.InstancedMesh(this.geo, this.mat, max);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.count = max;
+    this.mesh.renderOrder = 1;
     scene.add(this.mesh);
     this._i = 0;
     this._dummy = new THREE.Object3D();
-    // Hide all initially by scaling to zero.
     const zero = new THREE.Object3D();
     zero.scale.set(0, 0, 0);
     zero.updateMatrix();
@@ -118,12 +119,13 @@ export class SkidMarks {
     this.mesh.instanceMatrix.needsUpdate = true;
   }
 
-  add(position, yaw) {
+  add(position, yaw, intensity = 1) {
     if (!this.enabled) return;
     const d = this._dummy;
-    d.position.set(position.x, 0.02, position.z);
+    d.position.set(position.x, 0.025, position.z);
     d.rotation.set(-Math.PI / 2, 0, -yaw);
-    d.scale.set(1, 1, 1);
+    const w = 1 + intensity * 0.4;
+    d.scale.set(w, 1.1, 1);
     d.updateMatrix();
     this.mesh.setMatrixAt(this._i, d.matrix);
     this.mesh.instanceMatrix.needsUpdate = true;

@@ -1,10 +1,10 @@
-// main.js — entry point. Wires the menu, settings, fullscreen/orientation and
-// starts the game. Loaded as an ES module (see index.html import map).
+// main.js — entry point. Wires the menu, settings, color picker,
+// fullscreen/orientation and starts the game. Loaded as an ES module.
 
 import { Game } from './game.js';
 import {
   settings, MenuPreview, goFullscreen, show, hide,
-  wireSettings, updateRotateHint,
+  wireSettings, wireColorPicker, updateRotateHint,
 } from './ui.js';
 import { initTouchControls, initKeyboardControls } from './controls.js';
 
@@ -12,20 +12,32 @@ let game = null;
 let preview = null;
 let state = 'menu'; // 'menu' | 'game' | 'paused'
 
-// Prevent iOS Safari pinch-zoom / double-tap zoom.
+// Prevent iOS Safari pinch-zoom / double-tap zoom / rubber-band scroll.
 function lockZoom() {
   document.addEventListener('gesturestart', (e) => e.preventDefault());
-  document.addEventListener('dblclick', (e) => e.preventDefault());
+  document.addEventListener('gesturechange', (e) => e.preventDefault());
   let lastTouch = 0;
   document.addEventListener('touchend', (e) => {
     const now = Date.now();
     if (now - lastTouch < 300) e.preventDefault();
     lastTouch = now;
   }, { passive: false });
-  // Block context menu long-press on controls.
+  document.addEventListener('touchmove', (e) => {
+    // Block scroll unless inside a scrollable modal.
+    if (!e.target.closest('.modal-card')) e.preventDefault();
+  }, { passive: false });
   document.addEventListener('contextmenu', (e) => {
-    if (e.target.closest('.ctrl') || e.target.closest('.btn')) e.preventDefault();
+    if (e.target.closest('.ctrl') || e.target.closest('.btn') || e.target.closest('.swatch')) e.preventDefault();
   });
+}
+
+// Small tap feedback for any button that lacks its own :active spring.
+function tapFeedback(el) {
+  el.addEventListener('pointerdown', () => el.classList.add('tapped'));
+  const clear = () => el.classList.remove('tapped');
+  el.addEventListener('pointerup', clear);
+  el.addEventListener('pointerleave', clear);
+  el.addEventListener('pointercancel', clear);
 }
 
 function init() {
@@ -33,40 +45,54 @@ function init() {
   initTouchControls();
   initKeyboardControls();
 
-  // Menu 3D preview
   preview = new MenuPreview(document.getElementById('menu-canvas'));
 
   // ---- Menu buttons ----
   document.getElementById('btn-play').addEventListener('click', startGame);
-  document.getElementById('btn-fullscreen-menu').addEventListener('click', goFullscreen);
-  document.getElementById('btn-fullscreen-game').addEventListener('click', goFullscreen);
+
+  // Fullscreen buttons (menu + in-game) — always give feedback, then resize.
+  ['btn-fullscreen-menu', 'btn-fullscreen-game'].forEach((id) => {
+    const btn = document.getElementById(id);
+    tapFeedback(btn);
+    btn.addEventListener('click', async () => {
+      btn.classList.add('busy');
+      await goFullscreen();
+      // Resize a few times as the viewport settles after FS/rotation.
+      setTimeout(onResize, 60);
+      setTimeout(onResize, 350);
+      setTimeout(onResize, 700);
+      btn.classList.remove('busy');
+    });
+  });
 
   const settingsModal = document.getElementById('settings-modal');
   document.getElementById('btn-settings').addEventListener('click', () => show('settings-modal'));
   document.getElementById('btn-settings-close').addEventListener('click', () => hide('settings-modal'));
-  settingsModal.addEventListener('click', (e) => {
-    if (e.target === settingsModal) hide('settings-modal');
-  });
+  settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) hide('settings-modal'); });
 
   wireSettings((s) => { if (game) game.applySettings(s); });
+
+  // Car color picker → update the live preview car AND the game car.
+  wireColorPicker((hex) => {
+    if (preview) preview.setCarColor(hex);
+    if (game) game.setCarColor(hex);
+  });
 
   // ---- Pause menu ----
   document.getElementById('btn-pause').addEventListener('click', pauseGame);
   document.getElementById('btn-resume').addEventListener('click', resumeGame);
-  document.getElementById('btn-restart').addEventListener('click', () => {
-    game.resetCar();
-    resumeGame();
-  });
+  document.getElementById('btn-restart').addEventListener('click', () => { game.resetCar(); resumeGame(); });
   document.getElementById('btn-quit').addEventListener('click', quitToMenu);
 
-  // ---- Resize / orientation ----
+  // ---- Resize / orientation / fullscreen ----
   window.addEventListener('resize', onResize);
   window.addEventListener('orientationchange', () => setTimeout(onResize, 250));
+  document.addEventListener('fullscreenchange', () => setTimeout(onResize, 100));
+  document.addEventListener('webkitfullscreenchange', () => setTimeout(onResize, 100));
   if (screen.orientation) {
     screen.orientation.addEventListener?.('change', () => setTimeout(onResize, 250));
   }
 
-  // Pause automatically when tab is hidden.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state === 'game') pauseGame();
   });
@@ -83,9 +109,9 @@ function startGame() {
   show('game');
   state = 'game';
 
-  // Give the DOM a frame so canvas sizes to the game screen, then build/start.
   requestAnimationFrame(() => {
     game.start();
+    game.setCarColor(settings.carColor);
     game.resize();
     updateRotateHint(true);
   });
@@ -121,7 +147,6 @@ function onResize() {
   updateRotateHint(state === 'game' || state === 'paused');
 }
 
-// Kick off once the DOM is ready.
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', init);
 } else {
