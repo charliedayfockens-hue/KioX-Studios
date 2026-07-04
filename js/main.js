@@ -23,8 +23,11 @@ function lockZoom() {
     lastTouch = now;
   }, { passive: false });
   document.addEventListener('touchmove', (e) => {
-    // Block scroll unless inside a scrollable modal.
-    if (!e.target.closest('.modal-card')) e.preventDefault();
+    // Allow scrolling inside the menu and modals; lock everything else
+    // (so the game view never scrolls during gameplay).
+    if (!e.target.closest('.menu-scroll') && !e.target.closest('.modal-card')) {
+      e.preventDefault();
+    }
   }, { passive: false });
   document.addEventListener('contextmenu', (e) => {
     if (e.target.closest('.ctrl') || e.target.closest('.btn') || e.target.closest('.swatch')) e.preventDefault();
