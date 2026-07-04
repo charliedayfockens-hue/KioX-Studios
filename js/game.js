@@ -13,21 +13,24 @@ const ZERO_INPUT = { gas: 0, brake: 0, steer: 0, handbrake: false };
 const AI_COLOR = '#2f6bff';
 const TOTAL_LAPS = 2;
 
-// Tracks a car's progress (nearest road index + laps) along the loop.
+// Tracks a car's progress (nearest road index + laps) along the loop. A lap is
+// only counted after the car has passed the far side of the track ("armed"),
+// so the very first crossing of the start line at spawn is never miscounted.
 class Progress {
-  constructor(samples) { this.s = samples; this.N = samples.length; this.laps = 0; this.prev = 0; this.idx = 0; this.value = 0; this.dist = 0; }
+  constructor(samples) { this.s = samples; this.N = samples.length; this.reset(); }
   update(pos) {
     let best = 0, bd = Infinity;
     for (let i = 0; i < this.N; i++) {
       const p = this.s[i]; const dx = p.x - pos.x, dz = p.z - pos.z; const d = dx * dx + dz * dz;
       if (d < bd) { bd = d; best = i; }
     }
-    if (this.prev > this.N * 0.7 && best < this.N * 0.3) this.laps++;
-    else if (this.prev < this.N * 0.3 && best > this.N * 0.7) this.laps = Math.max(0, this.laps - 1);
+    if (best > this.N * 0.4 && best < this.N * 0.65) this.armed = true; // reached the far side
+    if (this.armed && this.prev > this.N * 0.7 && best < this.N * 0.3) { this.laps++; this.armed = false; }
+    else if (this.prev < this.N * 0.3 && best > this.N * 0.7) { this.laps = Math.max(0, this.laps - 1); }
     this.prev = best; this.idx = best; this.dist = Math.sqrt(bd);
     this.value = this.laps * this.N + best;
   }
-  reset() { this.laps = 0; this.prev = 0; this.idx = 0; this.value = 0; }
+  reset() { this.laps = 0; this.prev = 0; this.idx = 0; this.value = 0; this.dist = 0; this.armed = false; }
 }
 
 export class Game {
@@ -74,7 +77,7 @@ export class Game {
     this._disposeScene();
     this.scene = new THREE.Scene();
 
-    const world = buildWorld(this.scene, q, this.track);
+    const world = buildWorld(this.scene, q);
     this.world = world;
     this.sun = world.sun;
     this.roadSamples = world.roadSamples;
@@ -165,7 +168,7 @@ export class Game {
 
   start(opts = {}) {
     this.mode = opts.mode || 'free';
-    this.track = opts.track || 'forest';
+    this.track = 'forest'; // Desert removed — Forest is the only track
     this._ensureRenderer();
     this._buildScene();
     this._showRaceHud(this.mode === 'race');

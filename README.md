@@ -33,9 +33,9 @@ More games are on the way.
 
 ### 🏎️ KioX Drift
 
-A 3D mobile drift game. Slide across wide low-poly tracks, lay down smoke and
-skid marks, chase a bigger drift score in **Free Drift**, or race a skilled
-drifting AI in **AI Race**.
+A 3D mobile drift game. Slide across a wide low-poly **Forest** circuit, lay
+down smoke and skid marks, chase a bigger drift score in **Free Drift**, or
+race a skilled drifting AI in **AI Race**.
 
 **Controls**
 
@@ -44,12 +44,12 @@ drifting AI in **AI Race**.
 
 **Highlights**
 
-- Two maps: **🌲 Forest** and **🏜️ Desert**, each with wide curvy tracks
-  (straights, sweepers, S-curves and a hairpin) and their own scenery, sky and lighting
+- A clean, wide **🌲 Forest** circuit — long start straight, wide sweepers, a
+  smooth S-section and a big open hairpin (beginner-friendly, lots of drift room)
 - Two modes: **Free Drift** (endless practice + drift score) and **AI Race**
   (2 laps vs a drifting AI, with a 3·2·1·GO countdown, lap counter, position and winner screen)
-- Slippery arcade drift physics — long glides, big holdable angles, 360 spins,
-  tire smoke and skid marks
+- Slippery arcade drift physics — snappy steering, long glides, big holdable
+  angles, 360 spins, **backwards drifts**, tire smoke and skid marks
 - Custom car colour (presets + full colour picker), saved between sessions
 - Polished mobile menu with an animated 3D car preview, fullscreen + landscape support
 - A smooth 3D follow camera
@@ -81,9 +81,9 @@ js/
   main.js               # app wiring (menu <-> game)
   ui.js                 # menu, settings, fullscreen, 3D car preview
   game.js               # renderer, follow camera, main loop, race system, HUD
-  world.js              # Forest + Desert tracks (themed low-poly scenery)
+  world.js              # the Forest track (low-poly scenery + waypoint path)
   car.js                # the drift car + arcade physics
-  ai.js                 # AI Race opponent (racing line + corner drifting)
+  ai.js                 # AI Race opponent (waypoint racing line + corner drifting)
   effects.js            # tire smoke + skid marks
   audio.js              # procedural engine / tire sound
   controls.js           # touch + keyboard input

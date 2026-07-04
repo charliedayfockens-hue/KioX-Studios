@@ -35,8 +35,8 @@ export function resolveInput(dt) {
 
   steerTarget = (right ? 1 : 0) - (left ? 1 : 0);
 
-  // Ease steering toward target — very fast response for snappy mobile steering.
-  const steerSpeed = 15;
+  // Ease steering toward target — near-instant response for snappy mobile steering.
+  const steerSpeed = 22;
   input.steer += (steerTarget - input.steer) * Math.min(1, steerSpeed * dt);
   if (Math.abs(input.steer) < 0.001) input.steer = 0;
 

@@ -1,53 +1,37 @@
-// world.js — themed low-poly drift tracks. Two maps share the same road-ribbon
-// builder but differ in layout, sky, lighting, ground and scenery:
-//   • Forest — grassy clearing with trees.
-//   • Desert — sandy course with cacti, rocks, dunes and rolling tumbleweeds.
-// Everything is primitives (no model/texture files) and kept light for mobile.
+// world.js — the "Forest" drift track: a clean, wide, beginner-friendly circuit
+// through a grassy forest — long start straight, wide sweepers, a smooth S,
+// and a big open hairpin. All primitives (no model/texture files), light for
+// mobile. The road samples double as the AI's waypoint path.
 
 import * as THREE from 'three';
 
-export const ARENA_HALF = 140; // half-size of the play area (meters)
-export const ROAD_WIDTH = 36;  // very wide road → lots of room to slide & 360
+export const ARENA_HALF = 145; // half-size of the play area (meters)
+export const ROAD_WIDTH = 38;  // very wide road → room to slide, 360 & reverse-drift
 
+// Clean circuit control points (counter-clockwise), z up:
+//   long bottom straight → wide sweeper up the right → right straight →
+//   wide left sweeper → smooth S across the top → sweeper down the left →
+//   left straight → big open hairpin → back onto the start straight.
 const FOREST_POINTS = [
-  [-12, 102], [52, 98], [100, 70], [106, 26], [70, 4], [106, -32],
-  [90, -78], [34, -104], [-28, -100], [-80, -88], [-114, -50],
-  [-92, -18], [-116, 10], [-74, 30], [-96, 64], [-50, 96],
-];
-const DESERT_POINTS = [
-  [0, 104], [62, 96], [108, 60], [96, 16], [110, -26], [68, -48],
-  [98, -92], [40, -110], [-26, -104], [-78, -94], [-114, -56],
-  [-72, -30], [-116, -2], [-66, 22], [-104, 60], [-48, 96],
+  [-55, -104], [45, -104], [96, -72], [104, -8], [88, 54],
+  [40, 80], [-8, 54], [-52, 82], [-100, 52], [-110, -18],
+  [-96, -76], [-50, -94],
 ];
 
-const THEMES = {
-  forest: {
-    sky: { top: 0x4aa6ff, bottom: 0xcdefff, horizon: 0xdff3ff },
-    fog: 0xcfeeff, fogNear: 190, fogFar: 540,
-    hemiSky: 0xdff1ff, hemiGround: 0x3a5a30, hemiInt: 0.95,
-    sunColor: 0xfff6e0, sunInt: 1.35,
-    ground: 0x5bbf4a, infield: 0x66c94f,
-    road: 0x41474f, edge: 0xf3f6fa, dash: 0xffd23f,
-    hill: 0x4aa63e, cloud: 0xffffff,
-    points: FOREST_POINTS, scenery: 'forest',
-  },
-  desert: {
-    sky: { top: 0xf0a85a, bottom: 0xffe9c8, horizon: 0xffcf95 },
-    fog: 0xf3d9ab, fogNear: 200, fogFar: 600,
-    hemiSky: 0xffe6c2, hemiGround: 0x9a6a34, hemiInt: 1.05,
-    sunColor: 0xffe2b4, sunInt: 1.5,
-    ground: 0xe2bd82, infield: 0xd8ad66,
-    road: 0x6d5b43, edge: 0xefe1bf, dash: 0xe6b552,
-    hill: 0xcaa062, cloud: 0xf4e3c8,
-    points: DESERT_POINTS, scenery: 'desert',
-  },
+const THEME = {
+  sky: { top: 0x4aa6ff, bottom: 0xcdefff, horizon: 0xdff3ff },
+  fog: 0xcfeeff, fogNear: 200, fogFar: 560,
+  hemiSky: 0xdff1ff, hemiGround: 0x3a5a30, hemiInt: 0.95,
+  sunColor: 0xfff6e0, sunInt: 1.35,
+  ground: 0x5bbf4a, infield: 0x66c94f,
+  road: 0x41474f, edge: 0xf3f6fa, dash: 0xffd23f,
+  hill: 0x4aa63e, cloud: 0xffffff,
 };
 
-export function buildWorld(scene, quality = 'medium', track = 'forest') {
-  const t = THEMES[track] || THEMES.forest;
+export function buildWorld(scene, quality = 'medium') {
+  const t = THEME;
   const group = new THREE.Group();
   scene.add(group);
-  const updaters = [];
 
   // ---- Sky ----
   const skyMat = new THREE.ShaderMaterial({
@@ -79,7 +63,7 @@ export function buildWorld(scene, quality = 'medium', track = 'forest') {
     sun.shadow.mapSize.set(s, s);
     sun.shadow.camera.near = 10;
     sun.shadow.camera.far = 320;
-    const d = 120;
+    const d = 130;
     sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
     sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
     sun.shadow.bias = -0.0005;
@@ -105,37 +89,27 @@ export function buildWorld(scene, quality = 'medium', track = 'forest') {
   infield.receiveShadow = quality !== 'low';
   group.add(infield);
 
-  // ---- Road ----
+  // ---- Road (its samples are the AI waypoint path) ----
   const roadCurve = new THREE.CatmullRomCurve3(
-    t.points.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'catmullrom', 0.5
+    FOREST_POINTS.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'catmullrom', 0.5
   );
   const roadSamples = roadCurve.getPoints(360);
   buildRoad(group, roadSamples, quality, t);
 
   addWoodenRails(group);
-
-  // ---- Scenery ----
-  if (t.scenery === 'desert') {
-    addDesertScenery(group, roadSamples, quality);
-    updaters.push(addTumbleweeds(group, quality));
-  } else {
-    addTrees(group, roadSamples, quality);
-  }
-
+  addTrees(group, roadSamples, quality);
   addConesAndSigns(group, roadSamples);
   addStaticSkids(group, roadSamples);
   addHills(group, t.hill);
   addStartLine(group, roadSamples);
 
-  // Start point: on the road, facing along the direction of travel.
   const s0 = roadSamples[0], s1 = roadSamples[3];
   const start = { x: s0.x, z: s0.z, yaw: Math.atan2(s1.x - s0.x, s1.z - s0.z) };
 
-  const update = (dt) => { for (const u of updaters) u(dt); };
-  return { group, sun, roadSamples, start, update, trackLength: roadSamples.length };
+  return { group, sun, roadSamples, start, update: () => {}, trackLength: roadSamples.length };
 }
 
-// ---------- Shared road builder ----------
+// ---------- Road builder ----------
 function buildRoad(group, samples, quality, theme) {
   const half = ROAD_WIDTH / 2;
   const asphalt = new THREE.MeshStandardMaterial({ color: theme.road, roughness: 0.95 });
@@ -175,7 +149,7 @@ function buildRoad(group, samples, quality, theme) {
   group.add(makeThinRibbon(edgeR, 0.35, 0.03, edgeMat));
 
   const dashMat = new THREE.MeshStandardMaterial({ color: theme.dash, roughness: 0.8 });
-  const dashGeo = new THREE.PlaneGeometry(0.5, 2.2);
+  const dashGeo = new THREE.PlaneGeometry(0.5, 2.4);
   for (let i = 0; i < samples.length; i += 6) {
     const p = samples[i], next = samples[(i + 1) % samples.length];
     const ang = Math.atan2(next.x - p.x, next.z - p.z);
@@ -210,7 +184,7 @@ function makeThinRibbon(points, w, y, mat) {
 function addStartLine(group, samples) {
   const p = samples[0], n = samples[3];
   const ang = Math.atan2(n.x - p.x, n.z - p.z);
-  const px = Math.cos(ang), pz = -Math.sin(ang);   // across-road direction
+  const px = Math.cos(ang), pz = -Math.sin(ang);
   const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
   const black = new THREE.MeshStandardMaterial({ color: 0x15171c, roughness: 0.7 });
   const cells = 12, cw = ROAD_WIDTH / cells, cell = new THREE.PlaneGeometry(cw, 1.6);
@@ -224,7 +198,6 @@ function addStartLine(group, samples) {
       group.add(m);
     }
   }
-  // Little start gate posts.
   const postMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.6 });
   [-1, 1].forEach((s) => {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 5, 8), postMat);
@@ -282,7 +255,6 @@ function addWoodenRails(group) {
   place(true); place(false);
 }
 
-// ---------- Forest scenery ----------
 function addTrees(group, roadSamples, quality) {
   const trunkGeo = new THREE.CylinderGeometry(0.35, 0.5, 3, 6);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2a, roughness: 0.9 });
@@ -303,7 +275,7 @@ function addTrees(group, roadSamples, quality) {
   while (placed < target && attempts < target * 12) {
     attempts++;
     const inner = Math.random() < 0.26;
-    const r = inner ? Math.random() * 30 : 82 + Math.random() * 92;
+    const r = inner ? Math.random() * 30 : 84 + Math.random() * 96;
     const a = Math.random() * Math.PI * 2;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (Math.abs(x) < ARENA_HALF - 3 && Math.abs(z) < ARENA_HALF - 3 && near(x, z)) continue;
@@ -323,155 +295,6 @@ function addTrees(group, roadSamples, quality) {
   }
 }
 
-// ---------- Desert scenery ----------
-function addDesertScenery(group, roadSamples, quality) {
-  const clear = ROAD_WIDTH / 2 + 8;
-  const near = makeRoadProximity(roadSamples, clear);
-  const cactusMat = new THREE.MeshStandardMaterial({ color: 0x3f8f4e, roughness: 0.85, flatShading: true });
-  const cactusMat2 = new THREE.MeshStandardMaterial({ color: 0x4faa5d, roughness: 0.85, flatShading: true });
-  const rockMat = new THREE.MeshStandardMaterial({ color: 0x9a7d5a, roughness: 1, flatShading: true });
-  const rockMat2 = new THREE.MeshStandardMaterial({ color: 0x7d6446, roughness: 1, flatShading: true });
-  const shrubMat = new THREE.MeshStandardMaterial({ color: 0x8a9a4a, roughness: 1, flatShading: true });
-
-  // Saguaro cactus (trunk + arms).
-  const makeSaguaro = () => {
-    const g = new THREE.Group();
-    const h = 4 + Math.random() * 3;
-    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, h, 8), cactusMat);
-    trunk.position.y = h / 2; trunk.castShadow = quality !== 'low'; g.add(trunk);
-    const arms = 1 + (Math.random() * 2 | 0);
-    for (let i = 0; i < arms; i++) {
-      const side = i % 2 === 0 ? 1 : -1;
-      const ay = h * (0.45 + Math.random() * 0.25);
-      const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.36, 1.6, 7), cactusMat);
-      arm.position.set(side * 0.55, ay, 0); arm.rotation.z = side * 0.9; g.add(arm);
-      const up = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.34, 1.3, 7), cactusMat);
-      up.position.set(side * 1.05, ay + 0.9, 0); g.add(up);
-    }
-    return g;
-  };
-  // Barrel cactus (squat).
-  const makeBarrel = () => {
-    const g = new THREE.Group();
-    const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 8, 6), cactusMat2);
-    b.scale.set(1, 1.3, 1); b.position.y = 1; b.castShadow = quality !== 'low'; g.add(b);
-    return g;
-  };
-  // Cluster of small cacti.
-  const makeCluster = () => {
-    const g = new THREE.Group();
-    for (let i = 0; i < 3; i++) {
-      const h = 1 + Math.random() * 1.4;
-      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.26, h, 6), cactusMat);
-      c.position.set((Math.random() - 0.5) * 1.2, h / 2, (Math.random() - 0.5) * 1.2); g.add(c);
-    }
-    return g;
-  };
-
-  const place = (factory, count, rMin, rMax) => {
-    let placed = 0, attempts = 0;
-    while (placed < count && attempts < count * 14) {
-      attempts++;
-      const a = Math.random() * Math.PI * 2;
-      const r = rMin + Math.random() * (rMax - rMin);
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (Math.abs(x) > ARENA_HALF - 3 || Math.abs(z) > ARENA_HALF - 3) { continue; }
-      if (near(x, z)) continue;
-      const o = factory();
-      o.position.set(x, 0, z); o.rotation.y = Math.random() * Math.PI;
-      const s = 0.8 + Math.random() * 0.6; o.scale.setScalar(s);
-      group.add(o); placed++;
-    }
-  };
-
-  const lots = quality === 'low' ? 0.6 : 1;
-  place(makeSaguaro, Math.round(30 * lots), 20, 175);
-  place(makeBarrel, Math.round(22 * lots), 24, 170);
-  place(makeCluster, Math.round(20 * lots), 22, 165);
-
-  // Rocks.
-  const rockGeos = [new THREE.DodecahedronGeometry(1, 0), new THREE.IcosahedronGeometry(1.2, 0)];
-  const placeRocks = (count) => {
-    let placed = 0, attempts = 0;
-    while (placed < count && attempts < count * 14) {
-      attempts++;
-      const a = Math.random() * Math.PI * 2, r = 22 + Math.random() * 150;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (Math.abs(x) > ARENA_HALF - 3 || Math.abs(z) > ARENA_HALF - 3 || near(x, z)) continue;
-      const rock = new THREE.Mesh(rockGeos[(Math.random() * rockGeos.length) | 0], Math.random() < 0.5 ? rockMat : rockMat2);
-      const s = 0.8 + Math.random() * 2.4;
-      rock.scale.set(s, s * (0.6 + Math.random() * 0.4), s);
-      rock.position.set(x, s * 0.3, z); rock.rotation.set(Math.random(), Math.random(), Math.random());
-      rock.castShadow = quality !== 'low';
-      group.add(rock); placed++;
-    }
-  };
-  placeRocks(Math.round(34 * lots));
-
-  // Small desert shrubs.
-  const placeShrubs = (count) => {
-    let placed = 0, attempts = 0;
-    while (placed < count && attempts < count * 12) {
-      attempts++;
-      const a = Math.random() * Math.PI * 2, r = 24 + Math.random() * 150;
-      const x = Math.cos(a) * r, z = Math.sin(a) * r;
-      if (Math.abs(x) > ARENA_HALF - 3 || Math.abs(z) > ARENA_HALF - 3 || near(x, z)) continue;
-      const sh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 0), shrubMat);
-      sh.scale.set(1.2, 0.7, 1.2); sh.position.set(x, 0.4, z);
-      group.add(sh); placed++;
-    }
-  };
-  placeShrubs(Math.round(26 * lots));
-
-  // Simple wooden direction signs at a few corners.
-  const woodMat = new THREE.MeshStandardMaterial({ color: 0xa9743f, roughness: 0.8 });
-  const postMat = new THREE.MeshStandardMaterial({ color: 0x6e4a28, roughness: 0.9 });
-  const makeWoodSign = (i) => {
-    const e = edgeAt(roadSamples, i, 5);
-    const g = new THREE.Group();
-    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 3.2, 7), postMat);
-    post.position.y = 1.6; post.castShadow = true; g.add(post);
-    for (let k = 0; k < 2; k++) {
-      const plank = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.5, 0.12), woodMat);
-      plank.position.set(0.5, 2.4 - k * 0.7, 0); plank.rotation.y = 0; g.add(plank);
-    }
-    g.position.set(e.x, 0, e.z); g.rotation.y = e.ang;
-    group.add(g);
-  };
-  makeWoodSign(50); makeWoodSign(160); makeWoodSign(280);
-}
-
-// A few tumbleweeds that slowly roll across the map and wrap around.
-function addTumbleweeds(group, quality) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xb79a5e, roughness: 1, flatShading: true, transparent: true, opacity: 0.92 });
-  const geo = new THREE.IcosahedronGeometry(1.1, 0);
-  const count = quality === 'low' ? 4 : 7;
-  const weeds = [];
-  for (let i = 0; i < count; i++) {
-    const m = new THREE.Mesh(geo, mat);
-    const a = Math.random() * Math.PI * 2, r = 20 + Math.random() * 150;
-    m.position.set(Math.cos(a) * r, 1.1, Math.sin(a) * r);
-    m.scale.setScalar(0.7 + Math.random() * 0.6);
-    group.add(m);
-    const dir = Math.random() * Math.PI * 2;
-    weeds.push({ m, vx: Math.cos(dir) * (3 + Math.random() * 3), vz: Math.sin(dir) * (3 + Math.random() * 3) });
-  }
-  return (dt) => {
-    for (const w of weeds) {
-      w.m.position.x += w.vx * dt;
-      w.m.position.z += w.vz * dt;
-      w.m.rotation.x += w.vz * dt * 0.6;
-      w.m.rotation.z -= w.vx * dt * 0.6;
-      const L = ARENA_HALF - 2;
-      if (w.m.position.x > L) w.m.position.x = -L;
-      if (w.m.position.x < -L) w.m.position.x = L;
-      if (w.m.position.z > L) w.m.position.z = -L;
-      if (w.m.position.z < -L) w.m.position.z = L;
-    }
-  };
-}
-
-// ---------- Shared decorations ----------
 function makeRoadProximity(roadSamples, clear) {
   const c2 = clear * clear;
   return (x, z) => {
@@ -526,7 +349,7 @@ function addConesAndSigns(group, roadSamples) {
     g.position.set(e.x, 0, e.z); g.rotation.y = e.ang + Math.PI / 2;
     group.add(g);
   };
-  makeChevronSign(70, 1); makeChevronSign(180, -1); makeChevronSign(300, 1);
+  makeChevronSign(70, 1); makeChevronSign(175, -1); makeChevronSign(295, 1);
 }
 
 function addStaticSkids(group, roadSamples) {
@@ -554,7 +377,7 @@ function addHills(group, color) {
   const hillMat = new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true });
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + 0.3;
-    const r = 150 + Math.random() * 120, s = 30 + Math.random() * 55;
+    const r = 155 + Math.random() * 120, s = 30 + Math.random() * 55;
     const hill = new THREE.Mesh(new THREE.SphereGeometry(s, 10, 7), hillMat);
     hill.position.set(Math.cos(a) * r, -s * 0.55, Math.sin(a) * r);
     hill.scale.y = 0.5;
