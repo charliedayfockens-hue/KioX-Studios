@@ -7,19 +7,19 @@
 // All behavior is driven by the easy-to-edit AI_TUNING block below.
 
 export const AI_TUNING = {
-  aiSpeed: 32,           // top speed on straights (m/s)
-  cornerSpeed: 20,       // target speed through the sharpest corners (m/s)
-  turnSpeed: 1.05,       // steering authority toward the racing line
-  driftAngle: 0.55,      // 0..1 how eagerly/strongly it drifts corners
-  grip: 4.6,             // AI car lateral grip (higher = holds the line)
-  waypointReach: 6,      // how far ahead (samples) it aims the racing line
-  recoveryStrength: 1.5, // steering gain when correcting back onto the road
+  aiSpeed: 31,           // top speed on straights (m/s)
+  cornerSpeed: 14,       // target speed through the sharpest corners (m/s)
+  turnSpeed: 1.15,       // steering authority toward the racing line
+  driftAngle: 0.5,       // 0..1 how eagerly/strongly it drifts corners
+  grip: 8.5,             // AI car lateral grip (high → holds the line on tight corners)
+  waypointReach: 5,      // how far ahead (samples) it aims the racing line
+  recoveryStrength: 1.7, // steering gain when correcting back onto the road
 
   // Secondary knobs (rarely need changing):
-  cornerSharpness: 0.55, // curvature (rad) above which it starts a drift
+  cornerSharpness: 0.5,  // curvature (rad) above which it starts a drift
   driftCooldown: 2.0,    // min seconds between drift initiations
-  steerSmoothness: 14,   // higher = quicker steering corrections
-  crossGain: 0.9,        // how hard it corrects back to the centerline
+  steerSmoothness: 15,   // higher = quicker steering corrections
+  crossGain: 1.15,       // how hard it corrects back to the centerline
   skill: 0.9,            // 0..1 overall competence (lower = more mistakes)
 };
 
@@ -46,10 +46,10 @@ export class AIController {
     // bigger corners via the handbrake — believable and fun, just not on rails.
     car.maxSpeed = this.t.aiSpeed;
     car.baseGrip = this.t.grip;
-    car.handbrakeGrip = 0.55;
-    car.maxLatAccel = 48;
+    car.handbrakeGrip = 0.6;
+    car.maxLatAccel = 85;       // realigns hard → holds tight lines at speed
     car.rollingDrag = 0.4;
-    car.maxYawRate = 1.9;
+    car.maxYawRate = 2.0;
     car.velDamp = 0.04;
   }
 
@@ -123,8 +123,8 @@ export class AIController {
     this._steer += (rawSteer - this._steer) * Math.min(1, t.steerSmoothness * dt);
 
     // --- Corner detection → target speed (looks ahead so it brakes early) ---
-    const bend = Math.max(this._curvatureAhead(7), this._curvatureAhead(12) * 0.85);
-    const sharp = Math.min(1, bend / 1.15);
+    const bend = Math.max(this._curvatureAhead(6), this._curvatureAhead(11) * 0.9);
+    const sharp = Math.min(1, bend / 0.9);
     let targetSpeed = t.aiSpeed + (t.cornerSpeed - t.aiSpeed) * sharp;
     targetSpeed *= 0.85 + 0.15 * t.skill;
 

@@ -44,12 +44,16 @@ race a skilled drifting AI in **AI Race**.
 
 **Highlights**
 
-- A clean, wide **🌲 Forest** circuit — long start straight, wide sweepers, a
-  smooth S-section and a big open hairpin (beginner-friendly, lots of drift room)
+- The **🌲 Pine Ridge Circuit** — a wide, flowing drift course (front straight,
+  long right exit, medium right, long sweepers, an S-section and a big hairpin)
+  with dense pines, rocks, guardrails, curbs, tire barriers and drift signs
 - Two modes: **Free Drift** (endless practice + drift score) and **AI Race**
   (2 laps vs a drifting AI, with a 3·2·1·GO countdown, lap counter, position and winner screen)
-- Slippery arcade drift physics — snappy steering, long glides, big holdable
-  angles, 360 spins, **backwards drifts**, tire smoke and skid marks
+- Ordered **checkpoints** with floating rings + HUD progress (required to
+  complete a race lap), and an **off-road slowdown** in the grass
+- Slippery arcade drift physics — snappy steering that eases off mid-drift so
+  momentum carries forward, long glides, big holdable angles, 360 spins,
+  **backwards drifts**, tire smoke and skid marks
 - Custom car colour (presets + full colour picker), saved between sessions
 - Polished mobile menu with an animated 3D car preview, fullscreen + landscape support
 - A smooth 3D follow camera
@@ -81,7 +85,7 @@ js/
   main.js               # app wiring (menu <-> game)
   ui.js                 # menu, settings, fullscreen, 3D car preview
   game.js               # renderer, follow camera, main loop, race system, HUD
-  world.js              # the Forest track (low-poly scenery + waypoint path)
+  world.js              # the Pine Ridge Circuit (low-poly scenery + waypoint path)
   car.js                # the drift car + arcade physics
   ai.js                 # AI Race opponent (waypoint racing line + corner drifting)
   effects.js            # tire smoke + skid marks
